@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "QT 큐티 — AI 과학 문제 생성기",
-  description: "중학교 2학년 과학 AI 문제 생성 서비스",
+  title: "QT 큐티 — AI 오답 튜터",
+  description: "틀린 문제 찍으면 유사 문제 생성 + 해설 + 오답 분석",
 };
 
 export default function RootLayout({
