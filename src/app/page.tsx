@@ -1076,19 +1076,18 @@ export default function Home() {
         {/* 안내 */}
         <div className="bg-violet-50 border border-violet-200 rounded-xl p-3 mb-4">
           <p className="text-xs text-violet-600 leading-relaxed">
-            {wrongCount > 0
-              ? `틀린 ${wrongCount}문제가 자동 선택됐어요. 탭해서 추가/제거할 수 있어요.`
-              : '연습할 문제를 탭해서 선택해주세요.'}
+            AI가 채점을 추정했어요. <strong>틀렸으면 ❌, 맞았으면 ✅</strong>을 눌러서 직접 수정하세요.
+            틀린 문제만 자동으로 연습 대상이 됩니다.
           </p>
         </div>
 
-        {/* 전체 선택/해제 버튼 */}
+        {/* 빠른 필터 */}
         <div className="flex gap-2 mb-3">
           <button onClick={() => {
             const wrongIdxs = parseResult.problems.map((p, i) => p.is_wrong === true ? i : -1).filter(i => i >= 0);
-            setSelectedParsedIdx(wrongIdxs.length > 0 ? wrongIdxs : parseResult.problems.map((_, i) => i));
+            setSelectedParsedIdx(wrongIdxs);
           }} className="px-3 py-1.5 text-xs bg-red-50 text-red-600 border border-red-200 rounded-lg font-medium">
-            틀린 것만
+            틀린 것만 ({wrongCount})
           </button>
           <button onClick={() => setSelectedParsedIdx(parseResult.problems.map((_, i) => i))} className="px-3 py-1.5 text-xs bg-violet-50 text-violet-600 border border-violet-200 rounded-lg font-medium">
             전체 선택
@@ -1098,35 +1097,60 @@ export default function Home() {
           </button>
         </div>
 
-        {/* 문제 목록 - 맞음/틀림 표시 */}
+        {/* 문제 목록 - 맞음/틀림 토글 + 연습 선택 */}
         <div className="space-y-2 mb-4">
           {parseResult.problems.map((p, idx) => {
             const isSelected = selectedParsedIdx.includes(idx);
-            const statusIcon = p.is_wrong === true ? '❌' : p.is_wrong === false ? '✅' : '❓';
             const borderColor = isSelected
-              ? (p.is_wrong === true ? 'border-red-400 bg-red-50/50' : 'border-violet-400')
-              : 'border-transparent';
+              ? (p.is_wrong === true ? 'border-red-400 bg-red-50/30' : 'border-violet-400')
+              : (p.is_wrong === true ? 'border-red-200' : 'border-transparent');
+
+            // 맞음/틀림 토글 핸들러
+            const toggleWrong = (e: React.MouseEvent) => {
+              e.stopPropagation(); // 카드 클릭(선택) 이벤트 방지
+              setParseResult(prev => {
+                if (!prev) return prev;
+                const updated = { ...prev, problems: [...prev.problems] };
+                const current = updated.problems[idx].is_wrong;
+                // null → true → false → true 순환
+                const next = current === null ? true : !current;
+                updated.problems[idx] = { ...updated.problems[idx], is_wrong: next };
+                return updated;
+              });
+              // 틀림으로 바꾸면 자동 선택, 맞음으로 바꾸면 자동 해제
+              const currentWrong = p.is_wrong;
+              const nextWrong = currentWrong === null ? true : !currentWrong;
+              if (nextWrong && !isSelected) {
+                setSelectedParsedIdx(prev => [...prev, idx]);
+              } else if (!nextWrong && isSelected) {
+                setSelectedParsedIdx(prev => prev.filter(i => i !== idx));
+              }
+            };
 
             return (
             <div key={idx} onClick={() => setSelectedParsedIdx(prev => prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx])}
               className={`bg-white shadow-sm rounded-xl p-3 border-2 cursor-pointer transition-all ${borderColor}`}>
               <div className="flex items-start gap-2">
-                {/* 체크박스 + 상태 */}
-                <div className="flex flex-col items-center gap-1 flex-shrink-0">
-                  <div className={`w-5 h-5 rounded flex items-center justify-center text-xs ${isSelected ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-400 border border-gray-200'}`}>
-                    {isSelected ? '✓' : ''}
-                  </div>
-                  <span className="text-sm">{statusIcon}</span>
-                </div>
+                {/* 맞음/틀림 토글 버튼 */}
+                <button onClick={toggleWrong}
+                  className={`w-9 h-9 rounded-lg flex items-center justify-center text-lg flex-shrink-0 transition-all active:scale-90 ${
+                    p.is_wrong === true ? 'bg-red-100 border border-red-300' :
+                    p.is_wrong === false ? 'bg-green-100 border border-green-300' :
+                    'bg-gray-100 border border-gray-200'
+                  }`}>
+                  {p.is_wrong === true ? '❌' : p.is_wrong === false ? '✅' : '❓'}
+                </button>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 mb-1">
                     <span className="text-xs font-bold text-gray-500">Q{p.question_number || idx + 1}</span>
-                    {p.is_wrong === true && p.marked_answer && (
-                      <span className="text-xs text-red-500">내 답: {p.marked_answer}번</span>
+                    {p.marked_answer && (
+                      <span className={`text-xs ${p.is_wrong === true ? 'text-red-500' : 'text-gray-400'}`}>내 답: {p.marked_answer}번</span>
                     )}
                     {p.correct_answer && (
                       <span className="text-xs text-green-600">정답: {p.correct_answer}번</span>
                     )}
+                    {/* 선택 표시 */}
+                    {isSelected && <span className="ml-auto text-xs text-violet-600 font-bold">연습 ✓</span>}
                   </div>
                   <p className="text-xs text-gray-700 leading-relaxed line-clamp-2">{p.question_text}</p>
                   <div className="flex gap-1 mt-1.5 flex-wrap">
