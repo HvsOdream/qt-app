@@ -1,17 +1,13 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { supabase, signInWithGoogle, signInWithEmail, signOut, onAuthStateChange } from '@/lib/supabase';
-import type { User } from '@supabase/supabase-js';
 
 // ─── 타입 ───
 interface ParsedProblem {
-  question_number: string;
   question_text: string;
   choices: string[];
   marked_answer: string | null;
   correct_answer: string | null;
-  is_wrong: boolean | null;
   subject: string;
   topic: string;
   keywords: string[];
@@ -87,20 +83,13 @@ function levelTitle(lv: number) {
 
 // ─── 메인 컴포넌트 ───
 export default function Home() {
-  // Auth 상태
-  const [user, setUser] = useState<User | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [magicLinkEmail, setMagicLinkEmail] = useState('');
-  const [magicLinkSent, setMagicLinkSent] = useState(false);
-  const [magicLinkError, setMagicLinkError] = useState('');
-
   // 화면 모드
   const [mode, setMode] = useState<
-    'loading' | 'login' | 'onboard1' | 'onboard2' | 'onboard3' | 'choice' |
+    'loading' | 'onboard1' | 'onboard2' | 'onboard3' | 'choice' |
     'home' | 'scan' | 'parsed' | 'quiz' | 'result' | 'quest' | 'profile'
   >('loading');
-  const [tab, setTab] = useState<'photo' | 'unit' | 'topics'>('photo');
-  const [activeNav, setActiveNav] = useState<'home' | 'scan' | 'quest' | 'analysis' | 'profile'>('home');
+  const [tab, setTab] = useState<'photo' | 'unit'>('photo');
+  const [activeNav, setActiveNav] = useState<'home' | 'scan' | 'quest' | 'profile'>('home');
 
   // 게이미피케이션
   const [game, setGame] = useState<GameState>(DEFAULT_GAME);
@@ -110,26 +99,18 @@ export default function Home() {
   const [streakBonus, setStreakBonus] = useState(0);
   const [consecutiveCorrect, setConsecutiveCorrect] = useState(0);
 
-  // 사진 업로드 상태 (여러 장 지원)
-  const [imageFiles, setImageFiles] = useState<File[]>([]);
-  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  // 사진 업로드 상태
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
-  const [parseProgress, setParseProgress] = useState('');
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
   const [selectedParsedIdx, setSelectedParsedIdx] = useState<number[]>([]);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
-  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 단원 선택 상태
   const [units, setUnits] = useState<Unit[]>([]);
   const [selectedUnit, setSelectedUnit] = useState<string>('');
   const [selectedUnitName, setSelectedUnitName] = useState<string>('');
-
-  // 오답 기반 토픽 상태
-  interface TopicEntry { topic: string; wrongCount: number; keywords: string[]; lastSeen: string; }
-  interface SubjectGroup { subject: string; totalWrong: number; topics: TopicEntry[]; }
-  const [topicGroups, setTopicGroups] = useState<SubjectGroup[]>([]);
-  const [selectedTopic, setSelectedTopic] = useState<{ subject: string; topic: string; keywords: string[] } | null>(null);
 
   // 퀴즈 공통 상태
   const [difficulty, setDifficulty] = useState<number>(2);
@@ -142,63 +123,24 @@ export default function Home() {
   const [score, setScore] = useState({ correct: 0, total: 0 });
   const [quizAnswers, setQuizAnswers] = useState<{ question: string; studentAnswer: string; correctAnswer: string; isCorrect: boolean; subject?: string; topic?: string; keywords?: string[] }[]>([]);
 
-  // ─── PWA 서비스워커 등록 ───
+  // ─── 초기화 ───
   useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
-    }
-  }, []);
-
-  // ─── Auth 초기화 ───
-  useEffect(() => {
-    // 현재 세션 확인
-    const checkSession = async () => {
-      if (!supabase) { setAuthLoading(false); setMode('login'); return; }
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        setUser(session.user);
-        initGame();
-      } else {
-        setMode('login');
-      }
-      setAuthLoading(false);
-    };
-    checkSession();
-
-    // Auth 상태 리스너
-    const { data: { subscription } } = onAuthStateChange((u) => {
-      const authUser = u as User | null;
-      setUser(authUser);
-      if (authUser) {
-        initGame();
-      } else {
-        setMode('login');
-      }
-    });
-    return () => subscription.unsubscribe();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // ─── 게임 초기화 (로그인 후) ───
-  const initGame = () => {
     const g = loadGame();
     setGame(g);
+    // 스트릭 체크
     const today = new Date().toISOString().slice(0, 10);
     if (g.lastPlayDate && g.lastPlayDate !== today) {
       const last = new Date(g.lastPlayDate);
       const diff = Math.floor((new Date(today).getTime() - last.getTime()) / 86400000);
       if (diff > 1) { g.streak = 0; saveGame(g); setGame({ ...g }); }
     }
+    // 온보딩 완료 여부
     setMode(g.onboardDone ? 'home' : 'onboard1');
-  };
+  }, []);
 
-  // ─── 데이터 로드 (로그인 후) ───
   useEffect(() => {
-    if (!user) return;
-    const uid = user.id;
-    fetch(`/api/units`).then(r => r.json()).then(d => setUnits(d.units || [])).catch(() => {});
-    fetch(`/api/topics?user_id=${uid}`).then(r => r.json()).then(d => setTopicGroups(d.topics || [])).catch(() => {});
-  }, [user]);
+    fetch('/api/units').then(r => r.json()).then(d => setUnits(d.units || [])).catch(() => {});
+  }, []);
 
   // ─── 게이미피케이션 보상 ───
   const grantReward = useCallback((xp: number, qp: number) => {
@@ -225,118 +167,33 @@ export default function Home() {
     });
   }, []);
 
-  // ─── 이미지 압축 (1MB 이하로 리사이즈) ───
-  const compressImage = (file: File, maxSizeKB = 900): Promise<File> => {
-    return new Promise((resolve) => {
-      // 이미 작으면 그대로
-      if (file.size <= maxSizeKB * 1024) { resolve(file); return; }
-
-      const img = new Image();
-      const url = URL.createObjectURL(file);
-      img.onload = () => {
-        URL.revokeObjectURL(url);
-        const canvas = document.createElement('canvas');
-        // 최대 1600px로 리사이즈 (시험지 텍스트 인식에 충분)
-        const maxDim = 1600;
-        let { width, height } = img;
-        if (width > maxDim || height > maxDim) {
-          const ratio = Math.min(maxDim / width, maxDim / height);
-          width = Math.round(width * ratio);
-          height = Math.round(height * ratio);
-        }
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d')!;
-        ctx.drawImage(img, 0, 0, width, height);
-        canvas.toBlob((blob) => {
-          if (blob) {
-            resolve(new File([blob], file.name, { type: 'image/jpeg' }));
-          } else {
-            resolve(file);
-          }
-        }, 'image/jpeg', 0.8);
-      };
-      img.src = url;
-    });
-  };
-
-  // ─── 사진 업로드 핸들러 (여러 장 지원) ───
-  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    const newFiles: File[] = [];
-    const newPreviews: string[] = [];
-
-    for (let i = 0; i < files.length; i++) {
-      const compressed = await compressImage(files[i]);
-      newFiles.push(compressed);
-      newPreviews.push(URL.createObjectURL(compressed));
-    }
-
-    setImageFiles(prev => [...prev, ...newFiles]);
-    setImagePreviews(prev => [...prev, ...newPreviews]);
+  // ─── 사진 업로드 핸들러 ───
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
     setParseResult(null);
     setSelectedParsedIdx([]);
-    // input 초기화 (같은 파일 재선택 허용)
-    e.target.value = '';
-  };
-
-  const removeImage = (idx: number) => {
-    URL.revokeObjectURL(imagePreviews[idx]);
-    setImageFiles(prev => prev.filter((_, i) => i !== idx));
-    setImagePreviews(prev => prev.filter((_, i) => i !== idx));
   };
 
   const handleParseImage = async () => {
-    if (imageFiles.length === 0) return;
+    if (!imageFile) return;
     setParsing(true);
     try {
-      const allProblems: ParsedProblem[] = [];
-      let overallSubject = '';
-      let sourceDesc = '';
-
-      // 여러 장 순차 파싱 (각 장마다 API 호출)
-      for (let i = 0; i < imageFiles.length; i++) {
-        setParseProgress(`${i + 1}/${imageFiles.length}장 분석 중...`);
-        const formData = new FormData();
-        formData.append('image', imageFiles[i]);
-        const res = await fetch('/api/parse-image', { method: 'POST', body: formData });
-        const data = await res.json();
-        if (data.error) throw new Error(data.error);
-        if (data.problems) allProblems.push(...data.problems);
-        if (!overallSubject && data.overall_subject) overallSubject = data.overall_subject;
-        if (!sourceDesc && data.source_description) sourceDesc = data.source_description;
-      }
-
-      // is_wrong 보정: AI 시각 판별보다 marked_answer vs correct_answer 비교가 정확
-      const correctedProblems = allProblems.map((p: ParsedProblem) => {
-        if (p.marked_answer && p.correct_answer) {
-          const isWrong = String(p.marked_answer).trim() !== String(p.correct_answer).trim();
-          return { ...p, is_wrong: isWrong };
-        }
-        return p;
-      });
-
-      const corrected: ParseResult = {
-        problems: correctedProblems,
-        overall_subject: overallSubject,
-        source_description: sourceDesc,
-      };
-      setParseResult(corrected);
-
-      // 틀린 문제만 자동 선택
-      const wrongIdxs = correctedProblems
-        .map((p: ParsedProblem, i: number) => p.is_wrong === true ? i : -1)
-        .filter((i: number) => i >= 0);
-      setSelectedParsedIdx(wrongIdxs.length > 0 ? wrongIdxs : correctedProblems.map((_: ParsedProblem, i: number) => i));
-
+      const formData = new FormData();
+      formData.append('image', imageFile);
+      const res = await fetch('/api/parse-image', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setParseResult(data);
+      setSelectedParsedIdx(data.problems.map((_: ParsedProblem, i: number) => i));
       // 자동 카테고리 추가
-      if (overallSubject) {
+      if (data.overall_subject) {
         setGame(prev => {
           const g = { ...prev };
-          if (!g.categories.includes(overallSubject)) {
-            g.categories = [...g.categories, overallSubject];
+          if (!g.categories.includes(data.overall_subject)) {
+            g.categories = [...g.categories, data.overall_subject];
           }
           saveGame(g);
           return g;
@@ -345,7 +202,7 @@ export default function Home() {
       setMode('parsed');
     } catch {
       alert('이미지 분석에 실패했습니다. 다시 시도해주세요.');
-    } finally { setParsing(false); setParseProgress(''); }
+    } finally { setParsing(false); }
   };
 
   // ─── 유사 문제 생성 ───
@@ -353,26 +210,18 @@ export default function Home() {
     if (!parseResult || selectedParsedIdx.length === 0) return;
     setLoading(true);
     try {
-      // 선택한 문제 수에 따라 각 문제당 생성할 개수를 균등 분배
-      const perProblem = Math.max(1, Math.ceil(count / selectedParsedIdx.length));
-
-      // 병렬 호출로 속도 향상
-      const promises = selectedParsedIdx.map(idx => {
-        const original = parseResult.problems[idx];
-        return fetch('/api/generate-similar', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ originalProblem: original, count: perProblem, difficulty, user_id: user?.id }),
-        }).then(r => r.json());
-      });
-
-      const results = await Promise.all(promises);
       const allProblems: QuizProblem[] = [];
-      results.forEach(data => { if (data.problems) allProblems.push(...data.problems); });
-
+      for (const idx of selectedParsedIdx) {
+        const original = parseResult.problems[idx];
+        const res = await fetch('/api/generate-similar', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ originalProblem: original, count: Math.max(1, Math.floor(count / selectedParsedIdx.length)), difficulty }),
+        });
+        const data = await res.json();
+        if (data.problems) allProblems.push(...data.problems);
+      }
       if (allProblems.length > 0) {
-        // 요청한 수만큼만 잘라서 출제 (섞어서)
-        const shuffled = allProblems.sort(() => Math.random() - 0.5).slice(0, count);
-        setProblems(shuffled);
+        setProblems(allProblems.slice(0, count));
         setCurrentIndex(0); setSelectedAnswer(null); setShowExplanation(false);
         setScore({ correct: 0, total: 0 }); setQuizAnswers([]); setConsecutiveCorrect(0);
         setMode('quiz');
@@ -382,26 +231,6 @@ export default function Home() {
   };
 
   // ─── 단원 기반 생성 ───
-  // ─── 토픽 기반 문제 생성 (오답에서 확장) ───
-  const generateFromTopic = async () => {
-    if (!selectedTopic) return;
-    setLoading(true);
-    try {
-      const res = await fetch('/api/generate-by-topic', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subject: selectedTopic.subject, topic: selectedTopic.topic, keywords: selectedTopic.keywords, difficulty, count, user_id: user?.id }),
-      });
-      const data = await res.json();
-      if (data.problems) {
-        setProblems(data.problems);
-        setCurrentIndex(0); setSelectedAnswer(null); setShowExplanation(false);
-        setScore({ correct: 0, total: 0 }); setQuizAnswers([]); setConsecutiveCorrect(0);
-        setMode('quiz');
-      }
-    } catch { console.error('토픽 문제 생성 실패'); }
-    finally { setLoading(false); }
-  };
-
   const generateFromUnit = async () => {
     if (!selectedUnit) return;
     setLoading(true);
@@ -452,7 +281,7 @@ export default function Home() {
     try {
       await fetch('/api/save-result', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question_text: problem.question_text, choices: problem.choices, correct_answer: problem.correct_answer, student_answer: answer, is_correct: isCorrect, subject: problem.subject || null, topic: problem.topic || null, keywords: problem.keywords || [], user_id: user?.id }),
+        body: JSON.stringify({ question_text: problem.question_text, choices: problem.choices, correct_answer: problem.correct_answer, student_answer: answer, is_correct: isCorrect, subject: problem.subject || null, topic: problem.topic || null, keywords: problem.keywords || [] }),
       });
     } catch { /* ignore */ }
   };
@@ -489,8 +318,7 @@ export default function Home() {
   // ─── 초기화 ───
   const resetAll = () => {
     setMode('home'); setActiveNav('home'); setProblems([]); setParseResult(null);
-    imagePreviews.forEach(u => URL.revokeObjectURL(u));
-    setImageFiles([]); setImagePreviews([]); setSelectedParsedIdx([]);
+    setImageFile(null); setImagePreview(null); setSelectedParsedIdx([]);
     setSelectedUnit(''); setSelectedUnitName(''); setQuizAnswers([]);
   };
 
@@ -505,6 +333,69 @@ export default function Home() {
   const bloomLabels: Record<number, string> = { 1: '기억', 2: '이해', 3: '적용', 4: '분석', 5: '평가' };
   const diffLabels: Record<number, string> = { 1: '하', 2: '중', 3: '상' };
 
+  // ─── 세로 스와이프 ───
+  const NAV_SCREENS = ['home', 'scan', 'quest', 'profile'] as const;
+  type NavScreen = typeof NAV_SCREENS[number];
+  const swipeStartY = useRef<number | null>(null);
+  const swipeStartX = useRef<number | null>(null);
+  const swipeDelta = useRef(0);
+
+  const handleSwipeStart = (e: React.TouchEvent) => {
+    swipeStartY.current = e.touches[0].clientY;
+    swipeStartX.current = e.touches[0].clientX;
+    swipeDelta.current = 0;
+  };
+  const handleSwipeMove = (e: React.TouchEvent) => {
+    if (swipeStartY.current === null || swipeStartX.current === null) return;
+    const dy = e.touches[0].clientY - swipeStartY.current;
+    const dx = e.touches[0].clientX - swipeStartX.current;
+    // 가로 움직임이 더 크면 스와이프 무시 (스크롤 보호)
+    if (Math.abs(dx) > Math.abs(dy)) return;
+    swipeDelta.current = dy;
+  };
+  const handleSwipeEnd = () => {
+    if (swipeStartY.current === null) return;
+    const threshold = 80;
+    const currentIdx = NAV_SCREENS.indexOf(mode as NavScreen);
+    if (currentIdx === -1) { swipeStartY.current = null; return; }
+
+    if (swipeDelta.current < -threshold && currentIdx < NAV_SCREENS.length - 1) {
+      // 위로 스와이프 → 다음 화면
+      const next = NAV_SCREENS[currentIdx + 1];
+      setMode(next); setActiveNav(next);
+    } else if (swipeDelta.current > threshold && currentIdx > 0) {
+      // 아래로 스와이프 → 이전 화면
+      const prev = NAV_SCREENS[currentIdx - 1];
+      setMode(prev); setActiveNav(prev);
+    }
+    swipeStartY.current = null;
+    swipeStartX.current = null;
+    swipeDelta.current = 0;
+  };
+
+  // 스와이프 래퍼
+  const SwipeWrap = ({ children }: { children: React.ReactNode }) => {
+    const currentIdx = NAV_SCREENS.indexOf(mode as NavScreen);
+    return (
+      <div
+        onTouchStart={handleSwipeStart}
+        onTouchMove={handleSwipeMove}
+        onTouchEnd={handleSwipeEnd}
+        className="relative"
+      >
+        {children}
+        {/* 스와이프 인디케이터 */}
+        {currentIdx >= 0 && (
+          <div className="fixed right-2 top-1/2 -translate-y-1/2 z-40 flex flex-col gap-1.5">
+            {NAV_SCREENS.map((s, i) => (
+              <div key={s} className={`w-1.5 rounded-full transition-all ${i === currentIdx ? 'h-5 bg-violet-500' : 'h-1.5 bg-gray-300'}`} />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // ─── 하단 내비 ───
   const BottomNav = () => (
     <div className="fixed bottom-0 left-0 right-0 z-50">
@@ -512,14 +403,13 @@ export default function Home() {
         <div className="h-16 bg-white/90 backdrop-blur-xl rounded-2xl shadow-lg shadow-violet-200/30 border border-gray-100 flex items-center justify-around px-2">
           {[
             { id: 'home' as const, icon: '🏠', label: '홈', action: () => { setMode('home'); setActiveNav('home'); } },
-            { id: 'scan' as const, icon: '📷', label: '스캔', action: goScan },
+            { id: 'scan' as const, icon: '📷', label: '스캔', action: () => { setMode('scan'); setActiveNav('scan'); } },
             { id: 'quest' as const, icon: '🎮', label: '퀘스트', action: () => { setMode('quest'); setActiveNav('quest'); } },
-            { id: 'analysis' as const, icon: '📊', label: '분석', action: () => {} },
             { id: 'profile' as const, icon: '👤', label: '내 정보', action: () => { setMode('profile'); setActiveNav('profile'); } },
           ].map(n => (
-            <button key={n.id} onClick={n.action} className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${activeNav === n.id ? 'text-violet-600 bg-violet-50' : 'text-gray-400 hover:text-gray-600'} ${n.id === 'analysis' ? 'opacity-40' : ''}`}>
+            <button key={n.id} onClick={n.action} className={`flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl transition-all ${activeNav === n.id ? 'text-violet-600 bg-violet-50' : 'text-gray-400 hover:text-gray-600'}`}>
               <span className="text-lg">{n.icon}</span>
-              <span className={`text-xs ${activeNav === n.id ? 'font-semibold' : ''}`}>{n.label}{n.id === 'analysis' ? ' 🔒' : ''}</span>
+              <span className={`text-xs ${activeNav === n.id ? 'font-semibold' : ''}`}>{n.label}</span>
             </button>
           ))}
         </div>
@@ -556,78 +446,11 @@ export default function Home() {
   // ═══════════════════════════════════════
   // 로딩
   // ═══════════════════════════════════════
-  if (mode === 'loading' || authLoading) return (
+  if (mode === 'loading') return (
     <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white flex items-center justify-center">
       <div className="text-center">
         <h1 className="text-4xl font-black text-gray-900">Q<span className="text-violet-600">T</span></h1>
         <p className="text-gray-600 text-sm mt-2">틀린 문제가 경험치가 되는 곳</p>
-      </div>
-    </div>
-  );
-
-  // ═══════════════════════════════════════
-  // 로그인
-  // ═══════════════════════════════════════
-  if (mode === 'login') return (
-    <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white flex flex-col items-center justify-center px-7">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-10">
-          <h1 className="text-5xl font-black text-gray-900 mb-2">Q<span className="text-violet-600">T</span></h1>
-          <p className="text-gray-500 text-sm">틀린 문제가 경험치가 되는 곳</p>
-        </div>
-
-        {/* Google 로그인 */}
-        <button
-          onClick={signInWithGoogle}
-          className="w-full flex items-center justify-center gap-3 py-3.5 rounded-2xl bg-white border border-gray-200 shadow-sm text-gray-700 font-medium text-sm hover:bg-gray-50 active:scale-[0.98] transition-all mb-3"
-        >
-          <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-          Google로 시작하기
-        </button>
-
-        {/* 구분선 */}
-        <div className="flex items-center gap-3 my-5">
-          <div className="flex-1 h-px bg-gray-200" />
-          <span className="text-xs text-gray-400">또는</span>
-          <div className="flex-1 h-px bg-gray-200" />
-        </div>
-
-        {/* 이메일 매직링크 */}
-        {!magicLinkSent ? (
-          <div>
-            <input
-              type="email"
-              placeholder="이메일 주소 입력"
-              value={magicLinkEmail}
-              onChange={e => { setMagicLinkEmail(e.target.value); setMagicLinkError(''); }}
-              className="w-full py-3.5 px-4 rounded-2xl border border-gray-200 text-sm focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 mb-3"
-            />
-            {magicLinkError && <p className="text-xs text-red-500 mb-2 px-1">{magicLinkError}</p>}
-            <button
-              onClick={async () => {
-                if (!magicLinkEmail.includes('@')) { setMagicLinkError('올바른 이메일을 입력해주세요'); return; }
-                const result = await signInWithEmail(magicLinkEmail);
-                if (result?.error) { setMagicLinkError(result.error); }
-                else { setMagicLinkSent(true); }
-              }}
-              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold text-sm active:scale-[0.98] transition-transform"
-            >
-              이메일로 로그인 링크 받기
-            </button>
-          </div>
-        ) : (
-          <div className="text-center bg-green-50 border border-green-200 rounded-2xl p-5">
-            <div className="text-3xl mb-2">📧</div>
-            <p className="text-sm font-bold text-green-800 mb-1">메일을 보냈어요!</p>
-            <p className="text-xs text-green-600">{magicLinkEmail}로 보낸<br/>링크를 클릭하면 바로 로그인됩니다</p>
-            <button onClick={() => { setMagicLinkSent(false); setMagicLinkEmail(''); }} className="text-xs text-gray-500 mt-3 underline">다른 이메일로 시도</button>
-          </div>
-        )}
-
-        <p className="text-xs text-gray-400 text-center mt-8 leading-relaxed">
-          로그인하면 기기 간 학습 기록이 동기화됩니다.<br/>
-          비밀번호 없이 안전하게 시작하세요.
-        </p>
       </div>
     </div>
   );
@@ -662,7 +485,7 @@ export default function Home() {
         <div className="text-6xl mb-4">🎯</div>
         <div className="flex gap-2 flex-wrap justify-center">
           <span className="px-3 py-1.5 rounded-lg text-xs bg-red-100 text-red-600">수학 42%</span>
-          <span className="px-3 py-1.5 rounded-lg text-xs bg-yellow-100 text-yellow-600">약점 분석</span>
+          <span className="px-3 py-1.5 rounded-lg text-xs bg-yellow-100 text-yellow-600">과학 71%</span>
           <span className="px-3 py-1.5 rounded-lg text-xs bg-green-100 text-green-600">영어 88%</span>
         </div>
       </div>
@@ -737,86 +560,69 @@ export default function Home() {
   );
 
   // ═══════════════════════════════════════
-  // 홈 허브
+  // 홈 허브 — 맵 + 스캔 중심
   // ═══════════════════════════════════════
   if (mode === 'home') return (
-    <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
+    <SwipeWrap><div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
       <div className="max-w-xl mx-auto px-4 pt-6">
-        {/* 프로필 바 */}
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-11 h-11 rounded-full bg-gradient-to-br from-violet-600 to-violet-400 flex items-center justify-center text-xl border-2 border-violet-300">🧠</div>
+        {/* 미니 레벨 바 */}
+        <div className="flex items-center gap-2 mb-6">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-600 to-violet-400 flex items-center justify-center text-sm border-2 border-violet-300">🧠</div>
           <div className="flex-1">
-            <div className="text-sm font-bold text-gray-900">Lv.{game.level} {levelTitle(game.level)}</div>
-            <XpBar />
+            <XpBar compact />
           </div>
-          <div className="text-center">
-            <div className="text-lg">🔥</div>
-            <div className="text-xs text-yellow-600 font-bold">{game.streak}일</div>
-          </div>
+          <span className="text-xs text-gray-400">Lv.{game.level}</span>
+          {game.streak > 0 && <span className="text-xs text-orange-500 font-bold">🔥{game.streak}</span>}
         </div>
 
-        {/* QP / 통계 */}
-        <div className="flex gap-2 mb-4">
-          <div className="flex-1 bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2 text-center">
-            <div className="text-xs text-yellow-600">QP</div>
-            <div className="text-base font-extrabold text-yellow-600">{game.qp}</div>
-          </div>
-          <div className="flex-1 bg-green-50 border border-green-200 rounded-xl px-3 py-2 text-center">
-            <div className="text-xs text-green-600">푼 문제</div>
-            <div className="text-base font-extrabold text-green-600">{game.totalSolved}</div>
-          </div>
-          <div className="flex-1 bg-violet-50 border border-violet-200 rounded-xl px-3 py-2 text-center">
-            <div className="text-xs text-violet-600">정답률</div>
-            <div className="text-base font-extrabold text-violet-600">{game.totalSolved > 0 ? Math.round((game.totalCorrect / game.totalSolved) * 100) : 0}%</div>
-          </div>
-        </div>
+        {/* 성장하는 맵 영역 */}
+        <div className="bg-white/80 backdrop-blur border border-gray-100 rounded-3xl p-6 mb-6 min-h-[280px] flex flex-col items-center justify-center relative overflow-hidden">
+          {/* 배경 그리드 패턴 */}
+          <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle, #7c3aed 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
 
-        {/* 일일 미션 */}
-        <div className="bg-white shadow-sm border border-violet-200 rounded-2xl p-4 mb-4">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-xs font-bold text-violet-600">📋 오늘의 미션</span>
-            <span className="text-xs text-gray-500">{Math.min(game.totalSolved >= 3 ? 1 : 0, 1) + (game.totalSolved >= 1 ? 1 : 0)}/3</span>
-          </div>
-          <div className="space-y-1.5 text-xs">
-            <div className="flex justify-between"><span className={game.totalSolved >= 3 ? 'text-gray-500 line-through' : 'text-gray-700'}>{game.totalSolved >= 3 ? '✅' : '⬜'} 문제 3개 풀기</span><span className="text-violet-600">+30 QP</span></div>
-            <div className="flex justify-between"><span className="text-gray-700">⬜ 새 시험지 스캔</span><span className="text-violet-600">+50 QP</span></div>
-            <div className="flex justify-between"><span className="text-gray-700">⬜ 오답 특훈 1회</span><span className="text-violet-600">+40 QP</span></div>
-          </div>
-        </div>
-
-        {/* CTA */}
-        <button onClick={goScan} className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold text-[15px] mb-4">📷 시험지 스캔하기</button>
-
-        {/* 카테고리 */}
-        {game.categories.length > 0 && (
-          <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-4 mb-4">
-            <div className="text-xs font-bold text-gray-900 mb-2">🏷 내 카테고리</div>
-            <div className="flex gap-1.5 flex-wrap">
-              {game.categories.map(c => <span key={c} className="px-2.5 py-1 bg-violet-100 text-violet-600 text-xs rounded-lg font-medium">{c}</span>)}
+          {game.categories.length === 0 ? (
+            // 첫 사용자 — 빈 맵
+            <div className="text-center relative z-10">
+              <div className="text-5xl mb-4 opacity-30">🗺️</div>
+              <p className="text-sm text-gray-400 font-medium mb-1">아직 탐험하지 않은 영역</p>
+              <p className="text-xs text-gray-300">시험지를 스캔하면 맵이 열려요</p>
             </div>
-          </div>
-        )}
-
-        {/* 해금 프리뷰 */}
-        <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-4 opacity-50">
-          <div className="text-xs font-bold text-gray-900 mb-2">🔒 해금 대기 중</div>
-          <div className="space-y-1 text-xs text-gray-500">
-            <div>📊 약점 분석 — {Math.min(game.totalSolved, 10)}/10 문제 풀면 해금</div>
-            <div>👥 문제 추천 — {Math.min(game.totalSolved, 30)}/30 문제 달성 시</div>
-            <div>⚔️ 랭킹 챌린지 — Lv.{game.level}/5 달성 시</div>
-          </div>
+          ) : (
+            // 탐색된 영역 표시
+            <div className="relative z-10 w-full">
+              <div className="text-xs text-gray-400 mb-3 font-medium">🗺️ 내 학습 맵</div>
+              <div className="grid grid-cols-2 gap-2">
+                {game.categories.map(c => (
+                  <div key={c} className="bg-violet-50 border border-violet-200 rounded-xl px-3 py-3 text-center transition-all hover:scale-[1.02]">
+                    <div className="text-sm font-bold text-violet-700">{c}</div>
+                    <div className="text-xs text-violet-400 mt-0.5">{game.totalSolved > 0 ? `${game.totalSolved}문제 탐색` : '탐색 시작'}</div>
+                  </div>
+                ))}
+                {/* 미발견 영역 힌트 */}
+                <div className="border-2 border-dashed border-gray-200 rounded-xl px-3 py-3 text-center">
+                  <div className="text-sm font-bold text-gray-300">???</div>
+                  <div className="text-xs text-gray-300 mt-0.5">미발견 영역</div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* 메인 CTA — 스캔 */}
+        <button onClick={goScan} className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold text-[15px] shadow-lg shadow-violet-300/30 active:scale-[0.98] transition-transform">
+          📷 시험지 스캔하기
+        </button>
       </div>
       <BottomNav />
       <LevelUpModal />
-    </div>
+    </div></SwipeWrap>
   );
 
   // ═══════════════════════════════════════
   // 스캔 화면 (촬영 전 안내 포함)
   // ═══════════════════════════════════════
   if (mode === 'scan') return (
-    <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
+    <SwipeWrap><div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
       <div className="max-w-xl mx-auto px-4 py-6">
         <div className="text-center mb-5">
           <h1 className="text-xl font-bold text-gray-900">📷 시험지 스캔</h1>
@@ -825,73 +631,42 @@ export default function Home() {
 
         {/* 탭 */}
         <div className="flex bg-gray-100 rounded-xl p-1 mb-4">
-          <button onClick={() => setTab('photo')} className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${tab === 'photo' ? 'bg-violet-600 text-white' : 'text-gray-500'}`}>📷 사진</button>
-          <button onClick={() => { setTab('topics'); fetch('/api/topics').then(r => r.json()).then(d => setTopicGroups(d.topics || [])).catch(() => {}); }} className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${tab === 'topics' ? 'bg-violet-600 text-white' : 'text-gray-500'}`}>🎯 약점 연습</button>
-          <button onClick={() => setTab('unit')} className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${tab === 'unit' ? 'bg-violet-600 text-white' : 'text-gray-500'}`}>📚 단원</button>
+          <button onClick={() => setTab('photo')} className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'photo' ? 'bg-violet-600 text-white' : 'text-gray-500'}`}>📷 사진으로 풀기</button>
+          <button onClick={() => setTab('unit')} className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'unit' ? 'bg-violet-600 text-white' : 'text-gray-500'}`}>📚 단원 선택</button>
         </div>
 
         {/* 사진 탭 */}
         {tab === 'photo' && (
           <>
             <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-5 mb-4">
-              {/* 카메라(촬영) / 갤러리(앨범) 분리 input */}
-              <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleImageSelect} className="hidden" />
-              <input ref={galleryInputRef} type="file" accept="image/*" multiple onChange={handleImageSelect} className="hidden" />
-
-              {/* 이미지 미리보기 (여러 장) */}
-              {imagePreviews.length > 0 ? (
-                <div className="mb-3">
-                  <div className="flex gap-2 overflow-x-auto pb-2">
-                    {imagePreviews.map((preview, idx) => (
-                      <div key={idx} className="relative flex-shrink-0">
-                        <img src={preview} alt={`시험지 ${idx + 1}`} className="w-28 h-36 rounded-xl border border-gray-200 object-cover bg-gray-100" />
-                        <button onClick={() => removeImage(idx)} className="absolute -top-1.5 -right-1.5 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-xs font-bold shadow">✕</button>
-                        <div className="absolute bottom-1 left-1 bg-black/50 text-white text-xs px-1.5 py-0.5 rounded">{idx + 1}장</div>
-                      </div>
-                    ))}
-                    {/* 추가 촬영 버튼 */}
-                    {imagePreviews.length < 5 && (
-                      <button onClick={() => cameraInputRef.current?.click()} className="w-28 h-36 flex-shrink-0 border-2 border-dashed border-violet-300 rounded-xl flex flex-col items-center justify-center gap-1 text-violet-500">
-                        <span className="text-2xl">+</span>
-                        <span className="text-xs">추가</span>
-                      </button>
-                    )}
-                  </div>
-                  <p className="text-xs text-gray-400 mt-1">{imagePreviews.length}장 선택됨 (최대 5장)</p>
+              <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={handleImageSelect} className="hidden" />
+              {imagePreview ? (
+                <div className="relative mb-3">
+                  <img src={imagePreview} alt="업로드된 문제" className="w-full rounded-xl border border-gray-200 max-h-72 object-contain bg-gray-100" />
+                  <button onClick={() => { setImageFile(null); setImagePreview(null); setParseResult(null); }} className="absolute top-2 right-2 w-7 h-7 bg-black/40 text-white rounded-full flex items-center justify-center text-xs">✕</button>
                 </div>
               ) : (
-                <div className="mb-3">
-                  {/* 카메라 / 갤러리 분리 버튼 */}
-                  <div className="flex gap-2">
-                    <button onClick={() => cameraInputRef.current?.click()} className="flex-1 h-36 border-2 border-dashed border-violet-300 rounded-xl flex flex-col items-center justify-center gap-2 text-violet-600/70 hover:border-violet-400 transition-colors">
-                      <span className="text-3xl">📸</span>
-                      <span className="text-xs font-medium">카메라로 촬영</span>
-                    </button>
-                    <button onClick={() => galleryInputRef.current?.click()} className="flex-1 h-36 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center gap-2 text-gray-500 hover:border-violet-300 transition-colors">
-                      <span className="text-3xl">🖼️</span>
-                      <span className="text-xs font-medium">앨범에서 선택</span>
-                      <span className="text-xs text-gray-400">여러 장 가능</span>
-                    </button>
-                  </div>
-                </div>
+                <button onClick={() => fileInputRef.current?.click()} className="w-full h-44 border-2 border-dashed border-violet-300 rounded-xl flex flex-col items-center justify-center gap-2 text-violet-600/70 hover:border-violet-400 transition-colors mb-3">
+                  <span className="text-4xl">📸</span>
+                  <span className="text-sm font-medium">사진 찍기 / 이미지 선택</span>
+                </button>
               )}
 
               {/* 촬영 가이드 */}
-              <div className="bg-gray-50 rounded-xl p-3 text-xs text-gray-400 space-y-1 mb-3">
+              <div className="bg-white shadow-sm rounded-xl p-3 text-xs text-gray-400 space-y-1 mb-3">
                 <div className="text-xs font-bold text-gray-900 mb-1.5">💡 잘 찍는 법</div>
                 <div>✅ 문제 전체가 보이게 찍어주세요</div>
-                <div>✅ 시험지 여러 페이지? 한 장씩 추가하면 돼요</div>
-                <div>✅ 사진은 자동 압축 — 용량 걱정 없음</div>
+                <div>✅ 밝은 곳에서, 그림자 없이</div>
+                <div>✅ 살짝 기울어져도 AI가 읽어요</div>
+                <div>✅ 한 장에 여러 문제 OK — 과목 상관없이!</div>
               </div>
 
-              {imageFiles.length > 0 && !parsing && (
-                <button onClick={handleParseImage} className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-medium">
-                  {imageFiles.length === 1 ? '문제 분석하기' : `${imageFiles.length}장 한번에 분석하기`}
-                </button>
+              {imageFile && !parsing && (
+                <button onClick={handleParseImage} className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-medium">문제 분석하기</button>
               )}
               {parsing && (
                 <div className="w-full py-3 rounded-xl bg-violet-100 text-violet-500 font-medium text-center text-sm">
-                  <span className="inline-block animate-spin mr-2">⏳</span>{parseProgress || 'AI가 문제를 분석하고 있어요...'}
+                  <span className="inline-block animate-spin mr-2">⏳</span>AI가 문제를 분석하고 있어요...
                 </div>
               )}
             </div>
@@ -906,252 +681,85 @@ export default function Home() {
           </>
         )}
 
-        {/* 약점 연습 탭 */}
-        {tab === 'topics' && (
-          <>
-            <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-5 mb-4">
-              <h2 className="text-sm font-semibold text-gray-900 mb-1">내 약점 주제</h2>
-              <p className="text-xs text-gray-500 mb-3">틀린 문제에서 자동으로 수집됩니다</p>
-              {topicGroups.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="text-3xl mb-2">📷</div>
-                  <p className="text-sm text-gray-500">아직 데이터가 없어요</p>
-                  <p className="text-xs text-gray-400 mt-1">사진으로 문제를 풀면 약점이 자동으로 쌓여요!</p>
-                  <button onClick={() => setTab('photo')} className="mt-4 px-4 py-2 rounded-xl bg-violet-100 text-violet-600 text-xs font-medium">사진으로 시작하기</button>
-                </div>
-              ) : (
-                <div className="space-y-2 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 340px)' }}>
-                  {[...topicGroups].sort((a, b) => b.totalWrong - a.totalWrong).map((group, gi) => (
-                    <details key={group.subject} className="group" open={gi === 0}>
-                      <summary className="cursor-pointer py-2 px-3 rounded-lg hover:bg-gray-50 font-medium text-gray-700 text-xs flex justify-between items-center">
-                        <span>{group.subject}</span>
-                        <span className="text-violet-500 bg-violet-50 px-2 py-0.5 rounded-full text-[10px]">{group.totalWrong}회 오답</span>
-                      </summary>
-                      <div className="ml-2 mt-1 space-y-0.5">
-                        {[...group.topics].sort((a, b) => b.wrongCount - a.wrongCount).map(t => {
-                          const ready = t.wrongCount >= 3;
-                          return (
-                            <button key={t.topic}
-                              onClick={() => ready && setSelectedTopic({ subject: group.subject, topic: t.topic, keywords: t.keywords })}
-                              className={`w-full text-left py-1.5 px-3 rounded-lg text-xs transition-colors flex justify-between items-center ${
-                                !ready ? 'text-gray-300 cursor-default' :
-                                selectedTopic?.topic === t.topic && selectedTopic?.subject === group.subject ? 'bg-violet-100 text-violet-600 font-medium' : 'text-gray-500 hover:bg-gray-50'
-                              }`}>
-                              <span className="flex items-center gap-1">
-                                {t.topic}
-                                {!ready && <span className="text-[9px] text-gray-300 ml-1">({3 - t.wrongCount}개 더 필요)</span>}
-                              </span>
-                              <span className={`text-[10px] ${ready ? 'text-gray-400' : 'text-gray-300'}`}>{t.wrongCount}회</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </details>
-                  ))}
-                </div>
-              )}
-              {selectedTopic && <div className="mt-2 text-xs text-violet-600 bg-violet-100 px-3 py-1.5 rounded-lg">선택: {selectedTopic.subject} &gt; {selectedTopic.topic}</div>}
-            </div>
-            {selectedTopic && (
-              <>
-                <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-5 mb-4">
-                  <div className="flex gap-4">
-                    <div className="flex-1">
-                      <label className="text-xs font-medium text-gray-400 mb-1.5 block">난이도</label>
-                      <div className="flex gap-1.5">{[1,2,3].map(d => <button key={d} onClick={() => setDifficulty(d)} className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${difficulty === d ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500'}`}>{diffLabels[d]}</button>)}</div>
-                    </div>
-                    <div className="flex-1">
-                      <label className="text-xs font-medium text-gray-400 mb-1.5 block">문제 수</label>
-                      <select value={count} onChange={e => setCount(Number(e.target.value))} className="w-full py-1.5 px-2 rounded-lg border border-gray-200 bg-gray-100 text-sm text-gray-900">{[3,5,10].map(n => <option key={n} value={n}>{n}문제</option>)}</select>
-                    </div>
-                  </div>
-                </div>
-                <button onClick={generateFromTopic} disabled={loading} className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold disabled:bg-gray-200 disabled:text-gray-400 transition-colors">
-                  {loading ? '문제 생성 중...' : '약점 집중 연습'}
-                </button>
-              </>
-            )}
-          </>
-        )}
-
         {/* 단원 탭 */}
         {tab === 'unit' && (
           <>
             <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-5 mb-4">
               <h2 className="text-sm font-semibold text-gray-900 mb-1">단원 선택</h2>
-              <p className="text-xs text-gray-500 mb-3">문제가 쌓이면 단원이 자동 생성돼요!</p>
-              {topicGroups.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="text-3xl mb-2">📚</div>
-                  <p className="text-sm text-gray-500">아직 데이터가 부족합니다</p>
-                  <p className="text-xs text-gray-400 mt-1">사진으로 문제를 풀면 단원이 자동으로 만들어져요!</p>
-                  <button onClick={() => setTab('photo')} className="mt-4 px-4 py-2 rounded-xl bg-violet-100 text-violet-600 text-xs font-medium">사진으로 시작하기</button>
-                </div>
-              ) : (
-                <div className="space-y-1.5 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 340px)' }}>
-                  {[...topicGroups].sort((a, b) => b.totalWrong - a.totalWrong).map((group, gi) => (
-                    <details key={group.subject} className="group" open={gi === 0}>
-                      <summary className="cursor-pointer py-2 px-3 rounded-lg hover:bg-gray-50 font-medium text-gray-700 text-xs flex justify-between items-center">
-                        <span>{group.subject}</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-gray-400 text-[10px]">{group.totalWrong}회 오답</span>
-                          <span className="text-violet-500 bg-violet-50 px-2 py-0.5 rounded-full text-[10px]">{group.topics.length}개 주제</span>
-                        </div>
-                      </summary>
-                      <div className="ml-3 mt-1 space-y-0.5">
-                        {[...group.topics].sort((a, b) => b.wrongCount - a.wrongCount).map(t => {
-                          const ready = t.wrongCount >= 3;
-                          return (
-                            <button key={t.topic}
-                              onClick={() => ready && setSelectedTopic({ subject: group.subject, topic: t.topic, keywords: t.keywords })}
-                              className={`w-full text-left py-1.5 px-3 rounded-lg text-xs transition-colors flex justify-between items-center ${
-                                !ready ? 'text-gray-300 cursor-default' :
-                                selectedTopic?.topic === t.topic && selectedTopic?.subject === group.subject ? 'bg-violet-100 text-violet-500 font-medium' : 'text-gray-500 hover:bg-gray-100'
-                              }`}>
-                              <span className="flex items-center gap-1">
-                                {t.topic}
-                                {!ready && <span className="text-[9px] text-gray-300 ml-1">({3 - t.wrongCount}개 더 필요)</span>}
-                              </span>
-                              <span className={`text-[10px] ${ready ? 'text-gray-400' : 'text-gray-300'}`}>{t.wrongCount}회</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </details>
-                  ))}
-                </div>
-              )}
-              {selectedTopic && <div className="mt-2 text-xs text-violet-600 bg-violet-100 px-3 py-1.5 rounded-lg">선택: {selectedTopic.subject} &gt; {selectedTopic.topic}</div>}
+              <p className="text-xs text-gray-500 mb-3">중2 과학 · 천재교과서</p>
+              <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                {units.map(l1 => (
+                  <details key={l1.id} className="group">
+                    <summary className="cursor-pointer py-1.5 px-3 rounded-lg hover:bg-gray-100 font-medium text-gray-700 text-xs">{l1.code}. {l1.title}</summary>
+                    <div className="ml-3 mt-1 space-y-0.5">
+                      {l1.children?.map(l2 => (
+                        <details key={l2.id}>
+                          <summary className="cursor-pointer py-1 px-3 rounded text-xs text-gray-400 hover:bg-gray-100">{l2.code}. {l2.title}</summary>
+                          <div className="ml-3 mt-0.5 space-y-0.5">
+                            {l2.children?.map(l3 => (
+                              <button key={l3.id} onClick={() => { setSelectedUnit(l3.id); setSelectedUnitName(`${l3.code} ${l3.title}`); }}
+                                className={`w-full text-left py-1 px-3 rounded text-xs transition-colors ${selectedUnit === l3.id ? 'bg-violet-100 text-violet-500 font-medium' : 'text-gray-500 hover:bg-gray-100'}`}>
+                                {l3.code}. {l3.title}
+                              </button>
+                            ))}
+                          </div>
+                        </details>
+                      ))}
+                    </div>
+                  </details>
+                ))}
+              </div>
+              {selectedUnit && <div className="mt-2 text-xs text-violet-600 bg-violet-100 px-3 py-1.5 rounded-lg">선택: {selectedUnitName}</div>}
             </div>
-            {selectedTopic && (
-              <>
-                <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-5 mb-4">
-                  <div className="flex gap-4">
-                    <div className="flex-1">
-                      <label className="text-xs font-medium text-gray-400 mb-1.5 block">난이도</label>
-                      <div className="flex gap-1.5">{[1,2,3].map(d => <button key={d} onClick={() => setDifficulty(d)} className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${difficulty === d ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500'}`}>{diffLabels[d]}</button>)}</div>
-                    </div>
-                    <div className="flex-1">
-                      <label className="text-xs font-medium text-gray-400 mb-1.5 block">문제 수</label>
-                      <select value={count} onChange={e => setCount(Number(e.target.value))} className="w-full py-1.5 px-2 rounded-lg border border-gray-200 bg-gray-100 text-sm text-gray-900">{[3,5,10].map(n => <option key={n} value={n}>{n}문제</option>)}</select>
-                    </div>
-                  </div>
+            <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-5 mb-4">
+              <div className="flex gap-4">
+                <div className="flex-1">
+                  <label className="text-xs font-medium text-gray-400 mb-1.5 block">난이도</label>
+                  <div className="flex gap-1.5">{[1,2,3].map(d => <button key={d} onClick={() => setDifficulty(d)} className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${difficulty === d ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500'}`}>{diffLabels[d]}</button>)}</div>
                 </div>
-                <button onClick={generateFromTopic} disabled={loading} className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold disabled:bg-gray-200 disabled:text-gray-400 transition-colors">
-                  {loading ? '문제 생성 중...' : '단원별 연습'}
-                </button>
-              </>
-            )}
+                <div className="flex-1">
+                  <label className="text-xs font-medium text-gray-400 mb-1.5 block">문제 수</label>
+                  <select value={count} onChange={e => setCount(Number(e.target.value))} className="w-full py-1.5 px-2 rounded-lg border border-gray-200 bg-gray-100 text-sm text-gray-900">{[3,5,10].map(n => <option key={n} value={n}>{n}문제</option>)}</select>
+                </div>
+              </div>
+            </div>
+            <button onClick={generateFromUnit} disabled={!selectedUnit || loading} className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold disabled:bg-gray-200 disabled:text-gray-400 transition-colors">
+              {loading ? '문제 생성 중...' : '문제 풀기 시작'}
+            </button>
           </>
         )}
       </div>
       <BottomNav />
-    </div>
+    </div></SwipeWrap>
   );
 
   // ═══════════════════════════════════════
   // 파싱 결과 (촬영 후 안내)
   // ═══════════════════════════════════════
-  if (mode === 'parsed' && parseResult) {
-    const wrongCount = parseResult.problems.filter(p => p.is_wrong === true).length;
-    const correctCount = parseResult.problems.filter(p => p.is_wrong === false).length;
-    const unknownCount = parseResult.problems.filter(p => p.is_wrong === null).length;
-
-    return (
+  if (mode === 'parsed' && parseResult) return (
     <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
       <div className="max-w-xl mx-auto px-4 py-6">
         <button onClick={goScan} className="text-violet-600 text-sm mb-3 flex items-center gap-1">← 다시 촬영</button>
 
-        {/* 요약 헤더 */}
-        <div className="text-center mb-4">
+        <div className="text-center mb-5">
+          <div className="text-3xl mb-1">🎯</div>
           <h2 className="text-lg font-extrabold text-gray-900">{parseResult.problems.length}문제 발견!</h2>
-          <p className="text-xs text-gray-500 mb-2">{parseResult.overall_subject} · {parseResult.source_description}</p>
-          <div className="flex justify-center gap-3">
-            {wrongCount > 0 && <span className="px-2.5 py-1 bg-red-100 text-red-600 text-xs font-bold rounded-lg">틀림 {wrongCount}</span>}
-            {correctCount > 0 && <span className="px-2.5 py-1 bg-green-100 text-green-600 text-xs font-bold rounded-lg">맞음 {correctCount}</span>}
-            {unknownCount > 0 && <span className="px-2.5 py-1 bg-gray-100 text-gray-500 text-xs font-bold rounded-lg">판별불가 {unknownCount}</span>}
-          </div>
+          <p className="text-xs text-gray-500">{parseResult.overall_subject} · {parseResult.source_description}</p>
         </div>
 
-        {/* 안내 */}
-        <div className="bg-violet-50 border border-violet-200 rounded-xl p-3 mb-4">
-          <p className="text-xs text-violet-600 leading-relaxed">
-            AI가 채점을 추정했어요. <strong>틀렸으면 ❌, 맞았으면 ✅</strong>을 눌러서 직접 수정하세요.
-            틀린 문제만 자동으로 연습 대상이 됩니다.
-          </p>
+        {/* 촬영 후 안내 */}
+        <div className="bg-green-50 border border-green-200 rounded-xl p-3 mb-4">
+          <p className="text-xs text-green-600 leading-relaxed">✨ <strong>선택한 문제를 기반으로</strong> AI가 같은 개념, 다른 숫자의 유사 문제를 만들어요. 진짜 이해했는지 확인!</p>
         </div>
 
-        {/* 빠른 필터 */}
-        <div className="flex gap-2 mb-3">
-          <button onClick={() => {
-            const wrongIdxs = parseResult.problems.map((p, i) => p.is_wrong === true ? i : -1).filter(i => i >= 0);
-            setSelectedParsedIdx(wrongIdxs);
-          }} className="px-3 py-1.5 text-xs bg-red-50 text-red-600 border border-red-200 rounded-lg font-medium">
-            틀린 것만 ({wrongCount})
-          </button>
-          <button onClick={() => setSelectedParsedIdx(parseResult.problems.map((_, i) => i))} className="px-3 py-1.5 text-xs bg-violet-50 text-violet-600 border border-violet-200 rounded-lg font-medium">
-            전체 선택
-          </button>
-          <button onClick={() => setSelectedParsedIdx([])} className="px-3 py-1.5 text-xs bg-gray-50 text-gray-500 border border-gray-200 rounded-lg font-medium">
-            전체 해제
-          </button>
-        </div>
-
-        {/* 문제 목록 - 맞음/틀림 토글 + 연습 선택 */}
+        {/* 문제 목록 */}
         <div className="space-y-2 mb-4">
-          {parseResult.problems.map((p, idx) => {
-            const isSelected = selectedParsedIdx.includes(idx);
-            const borderColor = isSelected
-              ? (p.is_wrong === true ? 'border-red-400 bg-red-50/30' : 'border-violet-400')
-              : (p.is_wrong === true ? 'border-red-200' : 'border-transparent');
-
-            // 맞음/틀림 토글 핸들러
-            const toggleWrong = (e: React.MouseEvent) => {
-              e.stopPropagation(); // 카드 클릭(선택) 이벤트 방지
-              setParseResult(prev => {
-                if (!prev) return prev;
-                const updated = { ...prev, problems: [...prev.problems] };
-                const current = updated.problems[idx].is_wrong;
-                // null → true → false → true 순환
-                const next = current === null ? true : !current;
-                updated.problems[idx] = { ...updated.problems[idx], is_wrong: next };
-                return updated;
-              });
-              // 틀림으로 바꾸면 자동 선택, 맞음으로 바꾸면 자동 해제
-              const currentWrong = p.is_wrong;
-              const nextWrong = currentWrong === null ? true : !currentWrong;
-              if (nextWrong && !isSelected) {
-                setSelectedParsedIdx(prev => [...prev, idx]);
-              } else if (!nextWrong && isSelected) {
-                setSelectedParsedIdx(prev => prev.filter(i => i !== idx));
-              }
-            };
-
-            return (
+          {parseResult.problems.map((p, idx) => (
             <div key={idx} onClick={() => setSelectedParsedIdx(prev => prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx])}
-              className={`bg-white shadow-sm rounded-xl p-3 border-2 cursor-pointer transition-all ${borderColor}`}>
+              className={`bg-white shadow-sm rounded-xl p-3 border-2 cursor-pointer transition-colors ${selectedParsedIdx.includes(idx) ? 'border-violet-400' : 'border-transparent'}`}>
               <div className="flex items-start gap-2">
-                {/* 맞음/틀림 토글 버튼 */}
-                <button onClick={toggleWrong}
-                  className={`w-9 h-9 rounded-lg flex items-center justify-center text-lg flex-shrink-0 transition-all active:scale-90 ${
-                    p.is_wrong === true ? 'bg-red-100 border border-red-300' :
-                    p.is_wrong === false ? 'bg-green-100 border border-green-300' :
-                    'bg-gray-100 border border-gray-200'
-                  }`}>
-                  {p.is_wrong === true ? '❌' : p.is_wrong === false ? '✅' : '❓'}
-                </button>
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${selectedParsedIdx.includes(idx) ? 'bg-violet-600 text-gray-900' : 'bg-gray-200 text-gray-500'}`}>{idx + 1}</div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <span className="text-xs font-bold text-gray-500">Q{p.question_number || idx + 1}</span>
-                    {p.marked_answer && (
-                      <span className={`text-xs ${p.is_wrong === true ? 'text-red-500' : 'text-gray-400'}`}>내 답: {p.marked_answer}번</span>
-                    )}
-                    {p.correct_answer && (
-                      <span className="text-xs text-green-600">정답: {p.correct_answer}번</span>
-                    )}
-                    {/* 선택 표시 */}
-                    {isSelected && <span className="ml-auto text-xs text-violet-600 font-bold">연습 ✓</span>}
-                  </div>
                   <p className="text-xs text-gray-700 leading-relaxed line-clamp-2">{p.question_text}</p>
                   <div className="flex gap-1 mt-1.5 flex-wrap">
                     <span className="px-1.5 py-0.5 bg-violet-100 text-violet-600 text-xs rounded">{p.subject}</span>
@@ -1160,8 +768,7 @@ export default function Home() {
                 </div>
               </div>
             </div>
-            );
-          })}
+          ))}
         </div>
 
         {/* 옵션 + 예상 보상 */}
@@ -1182,13 +789,12 @@ export default function Home() {
 
         <button onClick={generateSimilar} disabled={selectedParsedIdx.length === 0 || loading}
           className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold disabled:bg-gray-200 disabled:text-gray-400 transition-colors">
-          {loading ? <span><span className="inline-block animate-spin mr-2">⏳</span>유사 문제 생성 중...</span> : `⚡ 선택한 ${selectedParsedIdx.length}문제로 연습 시작`}
+          {loading ? <span><span className="inline-block animate-spin mr-2">⏳</span>유사 문제 생성 중...</span> : `⚡ ${selectedParsedIdx.length}문제로 연습 시작`}
         </button>
       </div>
       <BottomNav />
     </div>
-    );
-  }
+  );
 
   // ═══════════════════════════════════════
   // 퀴즈 화면
@@ -1334,7 +940,7 @@ export default function Home() {
   // 퀘스트 탭
   // ═══════════════════════════════════════
   if (mode === 'quest') return (
-    <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
+    <SwipeWrap><div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
       <div className="max-w-xl mx-auto px-4 py-6">
         <h1 className="text-xl font-bold text-gray-900 text-center mb-5">🎮 퀘스트</h1>
         <div className="bg-white shadow-sm border border-violet-200 rounded-2xl p-4 mb-4">
@@ -1360,60 +966,79 @@ export default function Home() {
         </div>
       </div>
       <BottomNav />
-    </div>
+    </div></SwipeWrap>
   );
 
   // ═══════════════════════════════════════
-  // 프로필
+  // 프로필 — 통계 + 미션 + 뱃지 통합
   // ═══════════════════════════════════════
   if (mode === 'profile') return (
-    <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
+    <SwipeWrap><div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
       <div className="max-w-xl mx-auto px-4 py-6">
+        {/* 프로필 헤더 */}
         <div className="text-center mb-5">
           <div className="w-16 h-16 rounded-full bg-gradient-to-br from-violet-600 to-violet-400 flex items-center justify-center text-3xl mx-auto mb-2 border-3 border-yellow-400/50">🧠</div>
           <h2 className="text-lg font-extrabold text-gray-900">Lv.{game.level} {levelTitle(game.level)}</h2>
           <XpBar />
         </div>
-        <div className="grid grid-cols-3 gap-2 mb-4">
+
+        {/* 핵심 통계 4칸 */}
+        <div className="grid grid-cols-4 gap-1.5 mb-4">
           {[
-            { v: game.totalSolved, l: '총 문제', c: 'text-gray-900' },
+            { v: game.totalSolved, l: '푼 문제', c: 'text-gray-900' },
+            { v: game.totalSolved > 0 ? `${Math.round((game.totalCorrect / game.totalSolved) * 100)}%` : '0%', l: '정답률', c: 'text-violet-600' },
             { v: game.qp, l: 'QP', c: 'text-yellow-600' },
-            { v: `${game.streak}일`, l: '🔥 연속', c: 'text-red-600' },
+            { v: `${game.streak}일`, l: '연속', c: 'text-orange-500' },
           ].map((s, i) => (
-            <div key={i} className="bg-white shadow-sm rounded-xl p-3 text-center">
-              <div className={`text-base font-extrabold ${s.c}`}>{s.v}</div>
-              <div className="text-xs text-gray-500">{s.l}</div>
+            <div key={i} className="bg-white shadow-sm rounded-xl p-2.5 text-center">
+              <div className={`text-sm font-extrabold ${s.c}`}>{s.v}</div>
+              <div className="text-[10px] text-gray-400">{s.l}</div>
             </div>
           ))}
         </div>
+
+        {/* 일일 미션 (홈에서 이동) */}
+        <div className="bg-white shadow-sm border border-violet-200 rounded-2xl p-4 mb-4">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-xs font-bold text-violet-600">📋 오늘의 미션</span>
+            <span className="text-xs text-gray-500">{(game.totalSolved >= 3 ? 1 : 0) + (game.totalSolved >= 1 ? 1 : 0)}/3</span>
+          </div>
+          <div className="space-y-1.5 text-xs">
+            <div className="flex justify-between"><span className={game.totalSolved >= 3 ? 'text-gray-400 line-through' : 'text-gray-700'}>{game.totalSolved >= 3 ? '✅' : '⬜'} 문제 3개 풀기</span><span className="text-violet-600">+30 QP</span></div>
+            <div className="flex justify-between"><span className="text-gray-700">⬜ 새 시험지 스캔</span><span className="text-violet-600">+50 QP</span></div>
+            <div className="flex justify-between"><span className="text-gray-700">⬜ 오답 특훈 1회</span><span className="text-violet-600">+40 QP</span></div>
+          </div>
+        </div>
+
+        {/* 카테고리 */}
         {game.categories.length > 0 && (
           <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-4 mb-4">
-            <div className="text-xs font-bold text-gray-900 mb-2">🏷 내 카테고리</div>
+            <div className="text-xs font-bold text-gray-900 mb-2">🏷 탐험한 영역</div>
             <div className="flex gap-1.5 flex-wrap">{game.categories.map(c => <span key={c} className="px-2.5 py-1 bg-violet-100 text-violet-600 text-xs rounded-lg">{c}</span>)}</div>
           </div>
         )}
+
+        {/* 뱃지 */}
         <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-4 mb-4">
           <div className="text-xs font-bold text-gray-900 mb-2">🏅 뱃지</div>
           <div className="flex gap-2">
             {[1,2,3,4].map(i => <div key={i} className="w-10 h-10 rounded-xl bg-gray-100 border border-dashed border-gray-200 flex items-center justify-center text-sm text-gray-600">🔒</div>)}
           </div>
-          <p className="text-xs text-gray-500 mt-2">과목별 정답률 80% + 20문제 이상 풀면 뱃지 획득!</p>
+          <p className="text-xs text-gray-400 mt-2">과목별 정답률 80% + 20문제 이상 풀면 뱃지 획득!</p>
         </div>
 
-        {/* 계정 정보 + 로그아웃 */}
-        <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-4">
-          <div className="text-xs font-bold text-gray-900 mb-2">👤 계정</div>
-          <p className="text-xs text-gray-500 mb-3">{user?.email || user?.user_metadata?.full_name || '로그인됨'}</p>
-          <button
-            onClick={async () => { await signOut(); setUser(null); setMode('login'); }}
-            className="w-full py-2.5 rounded-xl border border-red-200 text-red-500 text-xs font-medium hover:bg-red-50 transition-colors"
-          >
-            로그아웃
-          </button>
+        {/* 해금 프리뷰 */}
+        <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-4 opacity-50">
+          <div className="text-xs font-bold text-gray-900 mb-2">🔒 해금 대기 중</div>
+          <div className="space-y-1 text-xs text-gray-500">
+            <div>📊 약점 분석 — {Math.min(game.totalSolved, 10)}/10 문제 풀면 해금</div>
+            <div>👥 문제 추천 — {Math.min(game.totalSolved, 30)}/30 문제 달성 시</div>
+            <div>⚔️ 랭킹 챌린지 — Lv.{game.level}/5 달성 시</div>
+          </div>
         </div>
       </div>
       <BottomNav />
-    </div>
+    </div></SwipeWrap>
   );
 
   return null;
