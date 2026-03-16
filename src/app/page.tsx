@@ -335,29 +335,33 @@ export default function Home() {
 
   // ─── 하단 내비 ───
   const BottomNav = () => (
-    <div className="fixed bottom-0 left-0 right-0 h-16 bg-gray-950/95 backdrop-blur-lg border-t border-white/5 flex items-center justify-around z-50">
-      {[
-        { id: 'home' as const, icon: '🏠', label: '홈', action: () => { setMode('home'); setActiveNav('home'); } },
-        { id: 'scan' as const, icon: '📷', label: '스캔', action: goScan },
-        { id: 'quest' as const, icon: '🎮', label: '퀘스트', action: () => { setMode('quest'); setActiveNav('quest'); } },
-        { id: 'analysis' as const, icon: '📊', label: '분석', action: () => {} },
-        { id: 'profile' as const, icon: '👤', label: '내 정보', action: () => { setMode('profile'); setActiveNav('profile'); } },
-      ].map(n => (
-        <button key={n.id} onClick={n.action} className={`flex flex-col items-center gap-0.5 text-[10px] px-3 py-1 transition-colors ${activeNav === n.id ? 'text-violet-400' : 'text-gray-600'} ${n.id === 'analysis' ? 'opacity-30' : ''}`}>
-          <span className="text-lg">{n.icon}</span>
-          <span>{n.label}{n.id === 'analysis' ? ' 🔒' : ''}</span>
-        </button>
-      ))}
+    <div className="fixed bottom-0 left-0 right-0 z-50">
+      <div className="max-w-xl mx-auto px-3 pb-2">
+        <div className="h-16 bg-white/90 backdrop-blur-xl rounded-2xl shadow-lg shadow-violet-200/30 border border-gray-100 flex items-center justify-around px-2">
+          {[
+            { id: 'home' as const, icon: '🏠', label: '홈', action: () => { setMode('home'); setActiveNav('home'); } },
+            { id: 'scan' as const, icon: '📷', label: '스캔', action: goScan },
+            { id: 'quest' as const, icon: '🎮', label: '퀘스트', action: () => { setMode('quest'); setActiveNav('quest'); } },
+            { id: 'analysis' as const, icon: '📊', label: '분석', action: () => {} },
+            { id: 'profile' as const, icon: '👤', label: '내 정보', action: () => { setMode('profile'); setActiveNav('profile'); } },
+          ].map(n => (
+            <button key={n.id} onClick={n.action} className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${activeNav === n.id ? 'text-violet-600 bg-violet-50' : 'text-gray-400 hover:text-gray-600'} ${n.id === 'analysis' ? 'opacity-40' : ''}`}>
+              <span className="text-lg">{n.icon}</span>
+              <span className={`text-[10px] ${activeNav === n.id ? 'font-semibold' : ''}`}>{n.label}{n.id === 'analysis' ? ' 🔒' : ''}</span>
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 
   // ─── 레벨업 모달 ───
   const LevelUpModal = () => showLevelUp ? (
-    <div className="fixed inset-0 z-[100] bg-black/70 flex items-center justify-center animate-fade-in">
-      <div className="bg-gray-900 border border-violet-500/30 rounded-3xl p-8 text-center mx-6 animate-bounce-in">
+    <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center animate-fade-in">
+      <div className="bg-white border border-violet-300 rounded-3xl p-8 text-center mx-6 animate-bounce-in">
         <div className="text-5xl mb-3">🎊</div>
-        <h2 className="text-2xl font-bold text-white mb-1">레벨 업!</h2>
-        <p className="text-violet-400 text-lg font-bold">Lv.{game.level - 1} → Lv.{game.level}</p>
+        <h2 className="text-2xl font-bold text-gray-900 mb-1">레벨 업!</h2>
+        <p className="text-violet-600 text-lg font-bold">Lv.{game.level - 1} → Lv.{game.level}</p>
         <p className="text-gray-500 text-sm mt-2">{levelTitle(game.level)}</p>
         <button onClick={() => setShowLevelUp(false)} className="mt-4 px-6 py-2 bg-violet-600 text-white rounded-xl text-sm font-medium">확인</button>
       </div>
@@ -369,9 +373,9 @@ export default function Home() {
     <div className={compact ? 'flex items-center gap-2' : ''}>
       <div className={`flex justify-between text-[10px] mb-1 ${compact ? 'hidden' : ''}`}>
         <span className="text-gray-500">Lv.{game.level} {levelTitle(game.level)}</span>
-        <span className="text-violet-400">{game.xp}/{xpForLevel(game.level)}</span>
+        <span className="text-violet-600">{game.xp}/{xpForLevel(game.level)}</span>
       </div>
-      <div className={`bg-white/5 rounded-full overflow-hidden ${compact ? 'flex-1 h-1.5' : 'h-2'}`}>
+      <div className={`bg-gray-100 rounded-full overflow-hidden ${compact ? 'flex-1 h-1.5' : 'h-2'}`}>
         <div className="h-full bg-gradient-to-r from-violet-600 to-violet-400 rounded-full transition-all" style={{ width: `${(game.xp / xpForLevel(game.level)) * 100}%` }} />
       </div>
     </div>
@@ -381,9 +385,9 @@ export default function Home() {
   // 로딩
   // ═══════════════════════════════════════
   if (mode === 'loading') return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+    <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white flex items-center justify-center">
       <div className="text-center">
-        <h1 className="text-4xl font-black text-white">Q<span className="text-violet-400">T</span></h1>
+        <h1 className="text-4xl font-black text-gray-900">Q<span className="text-violet-600">T</span></h1>
         <p className="text-gray-600 text-sm mt-2">틀린 문제가 경험치가 되는 곳</p>
       </div>
     </div>
@@ -393,17 +397,17 @@ export default function Home() {
   // 온보딩 1: 핵심 가치
   // ═══════════════════════════════════════
   if (mode === 'onboard1') return (
-    <div className="min-h-screen bg-gray-950 flex flex-col px-7 py-14">
+    <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white flex flex-col px-7 py-14">
       <div className="flex-1 flex flex-col items-center justify-center">
         <div className="text-6xl mb-2">📸</div>
         <div className="text-3xl mt-1">→ 🧠 → ✍️</div>
       </div>
       <div className="text-center mb-8">
-        <h2 className="text-xl font-extrabold text-white leading-relaxed">찍으면, AI가 분석하고<br/>새 문제를 만들어줘요</h2>
-        <p className="text-sm text-gray-500 mt-3">시험지든 워크북이든, 과목 상관없이<br/><span className="text-violet-400 font-semibold">사진 한 장</span>이면 충분해요</p>
+        <h2 className="text-xl font-extrabold text-gray-900 leading-relaxed">찍으면, AI가 분석하고<br/>새 문제를 만들어줘요</h2>
+        <p className="text-sm text-gray-500 mt-3">시험지든 워크북이든, 과목 상관없이<br/><span className="text-violet-600 font-semibold">사진 한 장</span>이면 충분해요</p>
       </div>
       <div className="flex gap-2 justify-center mb-5">
-        <div className="w-6 h-2 rounded-full bg-violet-500" /><div className="w-2 h-2 rounded-full bg-white/10" /><div className="w-2 h-2 rounded-full bg-white/10" />
+        <div className="w-6 h-2 rounded-full bg-violet-500" /><div className="w-2 h-2 rounded-full bg-gray-200" /><div className="w-2 h-2 rounded-full bg-gray-200" />
       </div>
       <button onClick={() => setMode('onboard2')} className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold text-base">다음</button>
       <button onClick={() => { setGame(prev => { const g = { ...prev, onboardDone: true }; saveGame(g); return g; }); setMode('home'); }} className="text-gray-600 text-sm text-center mt-3 py-2">건너뛰기</button>
@@ -414,21 +418,21 @@ export default function Home() {
   // 온보딩 2: 자동 개인화
   // ═══════════════════════════════════════
   if (mode === 'onboard2') return (
-    <div className="min-h-screen bg-gray-950 flex flex-col px-7 py-14">
+    <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white flex flex-col px-7 py-14">
       <div className="flex-1 flex flex-col items-center justify-center">
         <div className="text-6xl mb-4">🎯</div>
         <div className="flex gap-2 flex-wrap justify-center">
-          <span className="px-3 py-1.5 rounded-lg text-xs bg-red-500/15 text-red-400">수학 42%</span>
-          <span className="px-3 py-1.5 rounded-lg text-xs bg-yellow-500/15 text-yellow-400">과학 71%</span>
-          <span className="px-3 py-1.5 rounded-lg text-xs bg-green-500/15 text-green-400">영어 88%</span>
+          <span className="px-3 py-1.5 rounded-lg text-xs bg-red-100 text-red-600">수학 42%</span>
+          <span className="px-3 py-1.5 rounded-lg text-xs bg-yellow-100 text-yellow-600">과학 71%</span>
+          <span className="px-3 py-1.5 rounded-lg text-xs bg-green-100 text-green-600">영어 88%</span>
         </div>
       </div>
       <div className="text-center mb-8">
-        <h2 className="text-xl font-extrabold text-white leading-relaxed">풀수록 나를 알아가요</h2>
-        <p className="text-sm text-gray-500 mt-3">어떤 문제를 풀었는지, 뭘 틀렸는지<br/>AI가 자동으로 <span className="text-violet-400 font-semibold">약점 맵</span>을 만들어요</p>
+        <h2 className="text-xl font-extrabold text-gray-900 leading-relaxed">풀수록 나를 알아가요</h2>
+        <p className="text-sm text-gray-500 mt-3">어떤 문제를 풀었는지, 뭘 틀렸는지<br/>AI가 자동으로 <span className="text-violet-600 font-semibold">약점 맵</span>을 만들어요</p>
       </div>
       <div className="flex gap-2 justify-center mb-5">
-        <div className="w-2 h-2 rounded-full bg-white/10" /><div className="w-6 h-2 rounded-full bg-violet-500" /><div className="w-2 h-2 rounded-full bg-white/10" />
+        <div className="w-2 h-2 rounded-full bg-gray-200" /><div className="w-6 h-2 rounded-full bg-violet-500" /><div className="w-2 h-2 rounded-full bg-gray-200" />
       </div>
       <button onClick={() => setMode('onboard3')} className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold text-base">다음</button>
       <button onClick={() => { setGame(prev => { const g = { ...prev, onboardDone: true }; saveGame(g); return g; }); setMode('home'); }} className="text-gray-600 text-sm text-center mt-3 py-2">건너뛰기</button>
@@ -439,15 +443,15 @@ export default function Home() {
   // 온보딩 3: 게이미피케이션 티저
   // ═══════════════════════════════════════
   if (mode === 'onboard3') return (
-    <div className="min-h-screen bg-gray-950 flex flex-col px-7 py-14">
+    <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white flex flex-col px-7 py-14">
       <div className="flex-1 flex flex-col items-center justify-center">
         <div className="text-5xl mb-4">🏆</div>
         <div className="flex gap-2 flex-wrap justify-center">
           {[
-            { icon: '⭐', label: 'XP & 레벨', bg: 'bg-violet-500/10', border: 'border-violet-500/20', text: 'text-violet-400' },
-            { icon: '🏅', label: '뱃지 수집', bg: 'bg-yellow-500/10', border: 'border-yellow-500/20', text: 'text-yellow-400' },
-            { icon: '🔥', label: '연속 기록', bg: 'bg-red-500/10', border: 'border-red-500/20', text: 'text-red-400' },
-            { icon: '⚔️', label: '랭킹 경쟁', bg: 'bg-blue-500/10', border: 'border-blue-500/20', text: 'text-blue-400' },
+            { icon: '⭐', label: 'XP & 레벨', bg: 'bg-violet-100', border: 'border-violet-200', text: 'text-violet-600' },
+            { icon: '🏅', label: '뱃지 수집', bg: 'bg-yellow-50', border: 'border-yellow-200', text: 'text-yellow-600' },
+            { icon: '🔥', label: '연속 기록', bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-600' },
+            { icon: '⚔️', label: '랭킹 경쟁', bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-600' },
           ].map(({ icon, label, bg, border, text }) => (
             <div key={label} className={`${bg} border ${border} rounded-xl px-3 py-2 text-center`}>
               <div className="text-xl">{icon}</div>
@@ -457,11 +461,11 @@ export default function Home() {
         </div>
       </div>
       <div className="text-center mb-8">
-        <h2 className="text-xl font-extrabold text-white leading-relaxed">공부가 게임이 되는 순간</h2>
-        <p className="text-sm text-gray-500 mt-3">경험치, 뱃지, 랭킹, 시즌 챌린지<br/><span className="text-yellow-400 font-semibold">풀수록 해금되는 것들</span>이 기다리고 있어요</p>
+        <h2 className="text-xl font-extrabold text-gray-900 leading-relaxed">공부가 게임이 되는 순간</h2>
+        <p className="text-sm text-gray-500 mt-3">경험치, 뱃지, 랭킹, 시즌 챌린지<br/><span className="text-yellow-600 font-semibold">풀수록 해금되는 것들</span>이 기다리고 있어요</p>
       </div>
       <div className="flex gap-2 justify-center mb-5">
-        <div className="w-2 h-2 rounded-full bg-white/10" /><div className="w-2 h-2 rounded-full bg-white/10" /><div className="w-6 h-2 rounded-full bg-violet-500" />
+        <div className="w-2 h-2 rounded-full bg-gray-200" /><div className="w-2 h-2 rounded-full bg-gray-200" /><div className="w-6 h-2 rounded-full bg-violet-500" />
       </div>
       <button onClick={() => setMode('choice')} className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold text-base">시작하기</button>
     </div>
@@ -471,22 +475,22 @@ export default function Home() {
   // 첫 액션 선택
   // ═══════════════════════════════════════
   if (mode === 'choice') return (
-    <div className="min-h-screen bg-gray-950 px-6 py-14">
+    <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white px-6 py-14">
       <div className="text-center mb-6">
         <div className="text-3xl mb-2">👋</div>
-        <h2 className="text-lg font-extrabold text-white">어떻게 시작할까요?</h2>
+        <h2 className="text-lg font-extrabold text-gray-900">어떻게 시작할까요?</h2>
         <p className="text-xs text-gray-500 mt-1">어떤 걸 선택해도 좋아요</p>
       </div>
-      <div onClick={() => { completeOnboard(); goScan(); }} className="bg-white/[0.03] border-2 border-violet-500/30 rounded-2xl p-5 mb-3 cursor-pointer active:scale-[0.98] transition-transform relative">
+      <div onClick={() => { completeOnboard(); goScan(); }} className="bg-white shadow-sm border-2 border-violet-300 rounded-2xl p-5 mb-3 cursor-pointer active:scale-[0.98] transition-transform relative">
         <div className="absolute top-3 right-3 bg-violet-600 text-white text-[10px] font-bold px-2.5 py-0.5 rounded">추천</div>
         <div className="text-3xl mb-2">📸</div>
-        <h3 className="text-base font-bold text-white mb-1">시험지 바로 찍기</h3>
+        <h3 className="text-base font-bold text-gray-900 mb-1">시험지 바로 찍기</h3>
         <p className="text-xs text-gray-500 leading-relaxed">가지고 있는 시험지나 문제집을 바로 찍어보세요.<br/>AI가 과목과 유형을 자동으로 파악해요.</p>
-        <div className="text-xs text-yellow-400 font-semibold mt-2">🎁 첫 스캔 보너스 +100 QP</div>
+        <div className="text-xs text-yellow-600 font-semibold mt-2">🎁 첫 스캔 보너스 +100 QP</div>
       </div>
-      <div onClick={completeOnboard} className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-5 cursor-pointer active:scale-[0.98] transition-transform">
+      <div onClick={completeOnboard} className="bg-white shadow-sm border border-gray-100 rounded-2xl p-5 cursor-pointer active:scale-[0.98] transition-transform">
         <div className="text-3xl mb-2">🏠</div>
-        <h3 className="text-base font-bold text-white mb-1">홈에서 둘러보기</h3>
+        <h3 className="text-base font-bold text-gray-900 mb-1">홈에서 둘러보기</h3>
         <p className="text-xs text-gray-500 leading-relaxed">먼저 둘러보고, 준비되면 스캔해요.</p>
       </div>
       <p className="text-[10px] text-gray-600 text-center mt-6">📷 촬영한 사진은 문제 분석에만 사용되며, 서버에 저장되지 않습니다.</p>
@@ -497,47 +501,47 @@ export default function Home() {
   // 홈 허브
   // ═══════════════════════════════════════
   if (mode === 'home') return (
-    <div className="min-h-screen bg-gray-950 pb-20">
+    <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
       <div className="max-w-xl mx-auto px-4 pt-6">
         {/* 프로필 바 */}
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-11 h-11 rounded-full bg-gradient-to-br from-violet-600 to-violet-400 flex items-center justify-center text-xl border-2 border-violet-400/50">🧠</div>
+          <div className="w-11 h-11 rounded-full bg-gradient-to-br from-violet-600 to-violet-400 flex items-center justify-center text-xl border-2 border-violet-300">🧠</div>
           <div className="flex-1">
-            <div className="text-sm font-bold text-white">Lv.{game.level} {levelTitle(game.level)}</div>
+            <div className="text-sm font-bold text-gray-900">Lv.{game.level} {levelTitle(game.level)}</div>
             <XpBar />
           </div>
           <div className="text-center">
             <div className="text-lg">🔥</div>
-            <div className="text-[10px] text-yellow-400 font-bold">{game.streak}일</div>
+            <div className="text-[10px] text-yellow-600 font-bold">{game.streak}일</div>
           </div>
         </div>
 
         {/* QP / 통계 */}
         <div className="flex gap-2 mb-4">
-          <div className="flex-1 bg-yellow-500/[0.08] border border-yellow-500/20 rounded-xl px-3 py-2 text-center">
-            <div className="text-[9px] text-yellow-400">QP</div>
-            <div className="text-base font-extrabold text-yellow-400">{game.qp}</div>
+          <div className="flex-1 bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2 text-center">
+            <div className="text-[9px] text-yellow-600">QP</div>
+            <div className="text-base font-extrabold text-yellow-600">{game.qp}</div>
           </div>
-          <div className="flex-1 bg-green-500/[0.08] border border-green-500/20 rounded-xl px-3 py-2 text-center">
-            <div className="text-[9px] text-green-400">푼 문제</div>
-            <div className="text-base font-extrabold text-green-400">{game.totalSolved}</div>
+          <div className="flex-1 bg-green-50 border border-green-200 rounded-xl px-3 py-2 text-center">
+            <div className="text-[9px] text-green-600">푼 문제</div>
+            <div className="text-base font-extrabold text-green-600">{game.totalSolved}</div>
           </div>
-          <div className="flex-1 bg-violet-500/[0.08] border border-violet-500/20 rounded-xl px-3 py-2 text-center">
-            <div className="text-[9px] text-violet-400">정답률</div>
-            <div className="text-base font-extrabold text-violet-400">{game.totalSolved > 0 ? Math.round((game.totalCorrect / game.totalSolved) * 100) : 0}%</div>
+          <div className="flex-1 bg-violet-50 border border-violet-200 rounded-xl px-3 py-2 text-center">
+            <div className="text-[9px] text-violet-600">정답률</div>
+            <div className="text-base font-extrabold text-violet-600">{game.totalSolved > 0 ? Math.round((game.totalCorrect / game.totalSolved) * 100) : 0}%</div>
           </div>
         </div>
 
         {/* 일일 미션 */}
-        <div className="bg-white/[0.03] border border-violet-500/20 rounded-2xl p-4 mb-4">
+        <div className="bg-white shadow-sm border border-violet-200 rounded-2xl p-4 mb-4">
           <div className="flex justify-between items-center mb-2">
-            <span className="text-xs font-bold text-violet-400">📋 오늘의 미션</span>
+            <span className="text-xs font-bold text-violet-600">📋 오늘의 미션</span>
             <span className="text-[10px] text-gray-500">{Math.min(game.totalSolved >= 3 ? 1 : 0, 1) + (game.totalSolved >= 1 ? 1 : 0)}/3</span>
           </div>
           <div className="space-y-1.5 text-[11px]">
-            <div className="flex justify-between"><span className={game.totalSolved >= 3 ? 'text-gray-500 line-through' : 'text-gray-300'}>{game.totalSolved >= 3 ? '✅' : '⬜'} 문제 3개 풀기</span><span className="text-violet-400">+30 QP</span></div>
-            <div className="flex justify-between"><span className="text-gray-300">⬜ 새 시험지 스캔</span><span className="text-violet-400">+50 QP</span></div>
-            <div className="flex justify-between"><span className="text-gray-300">⬜ 오답 특훈 1회</span><span className="text-violet-400">+40 QP</span></div>
+            <div className="flex justify-between"><span className={game.totalSolved >= 3 ? 'text-gray-500 line-through' : 'text-gray-700'}>{game.totalSolved >= 3 ? '✅' : '⬜'} 문제 3개 풀기</span><span className="text-violet-600">+30 QP</span></div>
+            <div className="flex justify-between"><span className="text-gray-700">⬜ 새 시험지 스캔</span><span className="text-violet-600">+50 QP</span></div>
+            <div className="flex justify-between"><span className="text-gray-700">⬜ 오답 특훈 1회</span><span className="text-violet-600">+40 QP</span></div>
           </div>
         </div>
 
@@ -546,17 +550,17 @@ export default function Home() {
 
         {/* 카테고리 */}
         {game.categories.length > 0 && (
-          <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-4 mb-4">
-            <div className="text-xs font-bold text-white mb-2">🏷 내 카테고리</div>
+          <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-4 mb-4">
+            <div className="text-xs font-bold text-gray-900 mb-2">🏷 내 카테고리</div>
             <div className="flex gap-1.5 flex-wrap">
-              {game.categories.map(c => <span key={c} className="px-2.5 py-1 bg-violet-500/15 text-violet-400 text-[10px] rounded-lg font-medium">{c}</span>)}
+              {game.categories.map(c => <span key={c} className="px-2.5 py-1 bg-violet-100 text-violet-600 text-[10px] rounded-lg font-medium">{c}</span>)}
             </div>
           </div>
         )}
 
         {/* 해금 프리뷰 */}
-        <div className="bg-white/[0.02] border border-white/[0.05] rounded-2xl p-4 opacity-60">
-          <div className="text-xs font-bold text-white mb-2">🔒 해금 대기 중</div>
+        <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-4 opacity-50">
+          <div className="text-xs font-bold text-gray-900 mb-2">🔒 해금 대기 중</div>
           <div className="space-y-1 text-[11px] text-gray-500">
             <div>📊 약점 분석 — {Math.min(game.totalSolved, 10)}/10 문제 풀면 해금</div>
             <div>👥 문제 추천 — {Math.min(game.totalSolved, 30)}/30 문제 달성 시</div>
@@ -573,15 +577,15 @@ export default function Home() {
   // 스캔 화면 (촬영 전 안내 포함)
   // ═══════════════════════════════════════
   if (mode === 'scan') return (
-    <div className="min-h-screen bg-gray-950 pb-20">
+    <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
       <div className="max-w-xl mx-auto px-4 py-6">
         <div className="text-center mb-5">
-          <h1 className="text-xl font-bold text-white">📷 시험지 스캔</h1>
+          <h1 className="text-xl font-bold text-gray-900">📷 시험지 스캔</h1>
           <p className="text-xs text-gray-500 mt-1">틀린 문제를 찍으면 AI가 분석해줘요</p>
         </div>
 
         {/* 탭 */}
-        <div className="flex bg-white/5 rounded-xl p-1 mb-4">
+        <div className="flex bg-gray-100 rounded-xl p-1 mb-4">
           <button onClick={() => setTab('photo')} className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'photo' ? 'bg-violet-600 text-white' : 'text-gray-500'}`}>📷 사진으로 풀기</button>
           <button onClick={() => setTab('unit')} className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'unit' ? 'bg-violet-600 text-white' : 'text-gray-500'}`}>📚 단원 선택</button>
         </div>
@@ -589,23 +593,23 @@ export default function Home() {
         {/* 사진 탭 */}
         {tab === 'photo' && (
           <>
-            <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-5 mb-4">
+            <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-5 mb-4">
               <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={handleImageSelect} className="hidden" />
               {imagePreview ? (
                 <div className="relative mb-3">
-                  <img src={imagePreview} alt="업로드된 문제" className="w-full rounded-xl border border-white/10 max-h-72 object-contain bg-black/20" />
-                  <button onClick={() => { setImageFile(null); setImagePreview(null); setParseResult(null); }} className="absolute top-2 right-2 w-7 h-7 bg-black/50 text-white rounded-full flex items-center justify-center text-xs">✕</button>
+                  <img src={imagePreview} alt="업로드된 문제" className="w-full rounded-xl border border-gray-200 max-h-72 object-contain bg-gray-100" />
+                  <button onClick={() => { setImageFile(null); setImagePreview(null); setParseResult(null); }} className="absolute top-2 right-2 w-7 h-7 bg-black/40 text-white rounded-full flex items-center justify-center text-xs">✕</button>
                 </div>
               ) : (
-                <button onClick={() => fileInputRef.current?.click()} className="w-full h-44 border-2 border-dashed border-violet-500/30 rounded-xl flex flex-col items-center justify-center gap-2 text-violet-400/70 hover:border-violet-400 transition-colors mb-3">
+                <button onClick={() => fileInputRef.current?.click()} className="w-full h-44 border-2 border-dashed border-violet-300 rounded-xl flex flex-col items-center justify-center gap-2 text-violet-600/70 hover:border-violet-400 transition-colors mb-3">
                   <span className="text-4xl">📸</span>
                   <span className="text-sm font-medium">사진 찍기 / 이미지 선택</span>
                 </button>
               )}
 
               {/* 촬영 가이드 */}
-              <div className="bg-white/[0.03] rounded-xl p-3 text-[11px] text-gray-400 space-y-1 mb-3">
-                <div className="text-xs font-bold text-white mb-1.5">💡 잘 찍는 법</div>
+              <div className="bg-white shadow-sm rounded-xl p-3 text-[11px] text-gray-400 space-y-1 mb-3">
+                <div className="text-xs font-bold text-gray-900 mb-1.5">💡 잘 찍는 법</div>
                 <div>✅ 문제 전체가 보이게 찍어주세요</div>
                 <div>✅ 밝은 곳에서, 그림자 없이</div>
                 <div>✅ 살짝 기울어져도 AI가 읽어요</div>
@@ -616,15 +620,15 @@ export default function Home() {
                 <button onClick={handleParseImage} className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-medium">문제 분석하기</button>
               )}
               {parsing && (
-                <div className="w-full py-3 rounded-xl bg-violet-900/30 text-violet-300 font-medium text-center text-sm">
+                <div className="w-full py-3 rounded-xl bg-violet-100 text-violet-500 font-medium text-center text-sm">
                   <span className="inline-block animate-spin mr-2">⏳</span>AI가 문제를 분석하고 있어요...
                 </div>
               )}
             </div>
 
             {game.totalSolved === 0 && (
-              <div className="bg-yellow-500/[0.08] border border-yellow-500/20 rounded-xl p-3 text-center">
-                <span className="text-xs text-yellow-400 font-semibold">🏆 첫 스캔 보너스! +100 QP</span>
+              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-center">
+                <span className="text-xs text-yellow-600 font-semibold">🏆 첫 스캔 보너스! +100 QP</span>
               </div>
             )}
 
@@ -635,21 +639,21 @@ export default function Home() {
         {/* 단원 탭 */}
         {tab === 'unit' && (
           <>
-            <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-5 mb-4">
-              <h2 className="text-sm font-semibold text-white mb-1">단원 선택</h2>
+            <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-5 mb-4">
+              <h2 className="text-sm font-semibold text-gray-900 mb-1">단원 선택</h2>
               <p className="text-[10px] text-gray-500 mb-3">중2 과학 · 천재교과서</p>
               <div className="space-y-1.5 max-h-64 overflow-y-auto">
                 {units.map(l1 => (
                   <details key={l1.id} className="group">
-                    <summary className="cursor-pointer py-1.5 px-3 rounded-lg hover:bg-white/5 font-medium text-gray-300 text-xs">{l1.code}. {l1.title}</summary>
+                    <summary className="cursor-pointer py-1.5 px-3 rounded-lg hover:bg-gray-100 font-medium text-gray-700 text-xs">{l1.code}. {l1.title}</summary>
                     <div className="ml-3 mt-1 space-y-0.5">
                       {l1.children?.map(l2 => (
                         <details key={l2.id}>
-                          <summary className="cursor-pointer py-1 px-3 rounded text-[11px] text-gray-400 hover:bg-white/5">{l2.code}. {l2.title}</summary>
+                          <summary className="cursor-pointer py-1 px-3 rounded text-[11px] text-gray-400 hover:bg-gray-100">{l2.code}. {l2.title}</summary>
                           <div className="ml-3 mt-0.5 space-y-0.5">
                             {l2.children?.map(l3 => (
                               <button key={l3.id} onClick={() => { setSelectedUnit(l3.id); setSelectedUnitName(`${l3.code} ${l3.title}`); }}
-                                className={`w-full text-left py-1 px-3 rounded text-[11px] transition-colors ${selectedUnit === l3.id ? 'bg-violet-500/20 text-violet-300 font-medium' : 'text-gray-500 hover:bg-white/5'}`}>
+                                className={`w-full text-left py-1 px-3 rounded text-[11px] transition-colors ${selectedUnit === l3.id ? 'bg-violet-100 text-violet-500 font-medium' : 'text-gray-500 hover:bg-gray-100'}`}>
                                 {l3.code}. {l3.title}
                               </button>
                             ))}
@@ -660,21 +664,21 @@ export default function Home() {
                   </details>
                 ))}
               </div>
-              {selectedUnit && <div className="mt-2 text-[11px] text-violet-400 bg-violet-500/10 px-3 py-1.5 rounded-lg">선택: {selectedUnitName}</div>}
+              {selectedUnit && <div className="mt-2 text-[11px] text-violet-600 bg-violet-100 px-3 py-1.5 rounded-lg">선택: {selectedUnitName}</div>}
             </div>
-            <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-5 mb-4">
+            <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-5 mb-4">
               <div className="flex gap-4">
                 <div className="flex-1">
                   <label className="text-[10px] font-medium text-gray-400 mb-1.5 block">난이도</label>
-                  <div className="flex gap-1.5">{[1,2,3].map(d => <button key={d} onClick={() => setDifficulty(d)} className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${difficulty === d ? 'bg-violet-600 text-white' : 'bg-white/5 text-gray-500'}`}>{diffLabels[d]}</button>)}</div>
+                  <div className="flex gap-1.5">{[1,2,3].map(d => <button key={d} onClick={() => setDifficulty(d)} className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${difficulty === d ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500'}`}>{diffLabels[d]}</button>)}</div>
                 </div>
                 <div className="flex-1">
                   <label className="text-[10px] font-medium text-gray-400 mb-1.5 block">문제 수</label>
-                  <select value={count} onChange={e => setCount(Number(e.target.value))} className="w-full py-1.5 px-2 rounded-lg border border-white/10 bg-white/5 text-sm text-white">{[3,5,10].map(n => <option key={n} value={n}>{n}문제</option>)}</select>
+                  <select value={count} onChange={e => setCount(Number(e.target.value))} className="w-full py-1.5 px-2 rounded-lg border border-gray-200 bg-gray-100 text-sm text-gray-900">{[3,5,10].map(n => <option key={n} value={n}>{n}문제</option>)}</select>
                 </div>
               </div>
             </div>
-            <button onClick={generateFromUnit} disabled={!selectedUnit || loading} className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold disabled:bg-gray-700 disabled:text-gray-500 transition-colors">
+            <button onClick={generateFromUnit} disabled={!selectedUnit || loading} className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold disabled:bg-gray-200 disabled:text-gray-400 transition-colors">
               {loading ? '문제 생성 중...' : '문제 풀기 시작'}
             </button>
           </>
@@ -688,33 +692,33 @@ export default function Home() {
   // 파싱 결과 (촬영 후 안내)
   // ═══════════════════════════════════════
   if (mode === 'parsed' && parseResult) return (
-    <div className="min-h-screen bg-gray-950 pb-20">
+    <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
       <div className="max-w-xl mx-auto px-4 py-6">
-        <button onClick={goScan} className="text-violet-400 text-sm mb-3 flex items-center gap-1">← 다시 촬영</button>
+        <button onClick={goScan} className="text-violet-600 text-sm mb-3 flex items-center gap-1">← 다시 촬영</button>
 
         <div className="text-center mb-5">
           <div className="text-3xl mb-1">🎯</div>
-          <h2 className="text-lg font-extrabold text-white">{parseResult.problems.length}문제 발견!</h2>
+          <h2 className="text-lg font-extrabold text-gray-900">{parseResult.problems.length}문제 발견!</h2>
           <p className="text-xs text-gray-500">{parseResult.overall_subject} · {parseResult.source_description}</p>
         </div>
 
         {/* 촬영 후 안내 */}
-        <div className="bg-green-500/[0.08] border border-green-500/20 rounded-xl p-3 mb-4">
-          <p className="text-[11px] text-green-400 leading-relaxed">✨ <strong>선택한 문제를 기반으로</strong> AI가 같은 개념, 다른 숫자의 유사 문제를 만들어요. 진짜 이해했는지 확인!</p>
+        <div className="bg-green-50 border border-green-200 rounded-xl p-3 mb-4">
+          <p className="text-[11px] text-green-600 leading-relaxed">✨ <strong>선택한 문제를 기반으로</strong> AI가 같은 개념, 다른 숫자의 유사 문제를 만들어요. 진짜 이해했는지 확인!</p>
         </div>
 
         {/* 문제 목록 */}
         <div className="space-y-2 mb-4">
           {parseResult.problems.map((p, idx) => (
             <div key={idx} onClick={() => setSelectedParsedIdx(prev => prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx])}
-              className={`bg-white/[0.03] rounded-xl p-3 border-2 cursor-pointer transition-colors ${selectedParsedIdx.includes(idx) ? 'border-violet-500/50' : 'border-transparent'}`}>
+              className={`bg-white shadow-sm rounded-xl p-3 border-2 cursor-pointer transition-colors ${selectedParsedIdx.includes(idx) ? 'border-violet-400' : 'border-transparent'}`}>
               <div className="flex items-start gap-2">
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${selectedParsedIdx.includes(idx) ? 'bg-violet-600 text-white' : 'bg-white/10 text-gray-500'}`}>{idx + 1}</div>
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${selectedParsedIdx.includes(idx) ? 'bg-violet-600 text-gray-900' : 'bg-gray-200 text-gray-500'}`}>{idx + 1}</div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-gray-300 leading-relaxed line-clamp-2">{p.question_text}</p>
+                  <p className="text-xs text-gray-700 leading-relaxed line-clamp-2">{p.question_text}</p>
                   <div className="flex gap-1 mt-1.5 flex-wrap">
-                    <span className="px-1.5 py-0.5 bg-violet-500/15 text-violet-400 text-[9px] rounded">{p.subject}</span>
-                    <span className="px-1.5 py-0.5 bg-white/5 text-gray-400 text-[9px] rounded">{p.topic}</span>
+                    <span className="px-1.5 py-0.5 bg-violet-100 text-violet-600 text-[9px] rounded">{p.subject}</span>
+                    <span className="px-1.5 py-0.5 bg-gray-100 text-gray-400 text-[9px] rounded">{p.topic}</span>
                   </div>
                 </div>
               </div>
@@ -724,22 +728,22 @@ export default function Home() {
 
         {/* 옵션 + 예상 보상 */}
         <div className="flex gap-2 mb-4">
-          <div className="flex-1 bg-white/[0.03] rounded-xl p-2.5 text-center">
+          <div className="flex-1 bg-white shadow-sm rounded-xl p-2.5 text-center">
             <div className="text-[9px] text-gray-500">문제 수</div>
-            <select value={count} onChange={e => setCount(Number(e.target.value))} className="text-sm font-bold text-white bg-transparent text-center">{[3,5,10].map(n => <option key={n} value={n}>{n}</option>)}</select>
+            <select value={count} onChange={e => setCount(Number(e.target.value))} className="text-sm font-bold text-gray-900 bg-transparent text-center">{[3,5,10].map(n => <option key={n} value={n}>{n}</option>)}</select>
           </div>
-          <div className="flex-1 bg-white/[0.03] rounded-xl p-2.5 text-center">
+          <div className="flex-1 bg-white shadow-sm rounded-xl p-2.5 text-center">
             <div className="text-[9px] text-gray-500">난이도</div>
-            <div className="flex gap-1 mt-1 justify-center">{[1,2,3].map(d => <button key={d} onClick={() => setDifficulty(d)} className={`px-2 py-0.5 rounded text-[10px] font-medium ${difficulty === d ? 'bg-violet-600 text-white' : 'bg-white/5 text-gray-500'}`}>{d===1?'쉽게':d===2?'비슷':'어렵게'}</button>)}</div>
+            <div className="flex gap-1 mt-1 justify-center">{[1,2,3].map(d => <button key={d} onClick={() => setDifficulty(d)} className={`px-2 py-0.5 rounded text-[10px] font-medium ${difficulty === d ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500'}`}>{d===1?'쉽게':d===2?'비슷':'어렵게'}</button>)}</div>
           </div>
-          <div className="flex-1 bg-yellow-500/[0.08] rounded-xl p-2.5 text-center">
-            <div className="text-[9px] text-yellow-400">예상 보상</div>
-            <div className="text-sm font-bold text-yellow-400">+{count * 15} QP</div>
+          <div className="flex-1 bg-yellow-50 rounded-xl p-2.5 text-center">
+            <div className="text-[9px] text-yellow-600">예상 보상</div>
+            <div className="text-sm font-bold text-yellow-600">+{count * 15} QP</div>
           </div>
         </div>
 
         <button onClick={generateSimilar} disabled={selectedParsedIdx.length === 0 || loading}
-          className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold disabled:bg-gray-700 disabled:text-gray-500 transition-colors">
+          className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold disabled:bg-gray-200 disabled:text-gray-400 transition-colors">
           {loading ? <span><span className="inline-block animate-spin mr-2">⏳</span>유사 문제 생성 중...</span> : `⚡ ${selectedParsedIdx.length}문제로 연습 시작`}
         </button>
       </div>
@@ -753,28 +757,28 @@ export default function Home() {
   if (mode === 'quiz' && problems.length > 0) {
     const problem = problems[currentIndex];
     return (
-      <div className="min-h-screen bg-gray-950">
+      <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white">
         <div className="max-w-xl mx-auto px-4 py-6">
           {/* 진행바 + 스트릭 */}
           <div className="flex items-center justify-between mb-4">
             <span className="text-xs text-gray-500">{currentIndex + 1}/{problems.length}</span>
-            <div className="flex-1 mx-3 h-1.5 bg-white/5 rounded-full overflow-hidden">
+            <div className="flex-1 mx-3 h-1.5 bg-gray-100 rounded-full overflow-hidden">
               <div className="h-full bg-gradient-to-r from-violet-600 to-violet-400 rounded-full transition-all" style={{ width: `${((currentIndex + 1) / problems.length) * 100}%` }} />
             </div>
-            {consecutiveCorrect >= 2 && <span className="text-[11px] text-yellow-400 font-bold">🔥 {consecutiveCorrect}연속{consecutiveCorrect >= 5 ? '! x2.0' : consecutiveCorrect >= 3 ? ' x1.5' : ''}</span>}
-            <span className="text-xs font-medium text-violet-400 ml-2">{score.correct}/{score.total}</span>
+            {consecutiveCorrect >= 2 && <span className="text-[11px] text-yellow-600 font-bold">🔥 {consecutiveCorrect}연속{consecutiveCorrect >= 5 ? '! x2.0' : consecutiveCorrect >= 3 ? ' x1.5' : ''}</span>}
+            <span className="text-xs font-medium text-violet-600 ml-2">{score.correct}/{score.total}</span>
           </div>
 
           {/* 태그 */}
           <div className="flex gap-1.5 mb-3 flex-wrap">
-            {problem.subject && <span className="px-2 py-0.5 bg-violet-500/15 text-violet-400 text-[10px] rounded font-medium">{problem.subject}</span>}
-            {problem.topic && <span className="px-2 py-0.5 bg-white/5 text-gray-400 text-[10px] rounded">{problem.topic}</span>}
-            <span className="px-2 py-0.5 bg-yellow-500/15 text-yellow-400 text-[10px] rounded">{bloomLabels[problem.bloom_level] || '기타'}</span>
+            {problem.subject && <span className="px-2 py-0.5 bg-violet-100 text-violet-600 text-[10px] rounded font-medium">{problem.subject}</span>}
+            {problem.topic && <span className="px-2 py-0.5 bg-gray-100 text-gray-400 text-[10px] rounded">{problem.topic}</span>}
+            <span className="px-2 py-0.5 bg-yellow-100 text-yellow-600 text-[10px] rounded">{bloomLabels[problem.bloom_level] || '기타'}</span>
           </div>
 
           {/* 문제 카드 */}
-          <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-5 mb-4">
-            <p className="text-sm font-medium text-white leading-relaxed whitespace-pre-wrap">{problem.question_text}</p>
+          <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-5 mb-4">
+            <p className="text-sm font-medium text-gray-900 leading-relaxed whitespace-pre-wrap">{problem.question_text}</p>
           </div>
 
           {/* 선택지 */}
@@ -784,10 +788,10 @@ export default function Home() {
               const isSelected = selectedAnswer === num;
               const isCorrect = num === problem.correct_answer;
               let cls = 'w-full text-left p-3.5 rounded-xl border-2 transition-all text-sm ';
-              if (selectedAnswer === null) cls += 'border-white/[0.06] hover:border-violet-500/30 text-gray-300';
-              else if (isCorrect) cls += 'border-green-500/50 bg-green-500/10 text-green-300';
-              else if (isSelected && !isCorrect) cls += 'border-red-500/50 bg-red-500/10 text-red-300';
-              else cls += 'border-white/[0.03] text-gray-600';
+              if (selectedAnswer === null) cls += 'border-gray-100 hover:border-violet-300 text-gray-700';
+              else if (isCorrect) cls += 'border-green-300 bg-green-50 text-green-600';
+              else if (isSelected && !isCorrect) cls += 'border-red-300 bg-red-50 text-red-600';
+              else cls += 'border-gray-100 text-gray-400';
               return <button key={idx} onClick={() => handleAnswer(idx)} className={cls}>{choice}</button>;
             })}
           </div>
@@ -796,16 +800,16 @@ export default function Home() {
           {showExplanation && (
             <>
               {/* 정답/오답 피드백 */}
-              <div className={`rounded-xl p-4 mb-3 border ${selectedAnswer === problems[currentIndex].correct_answer ? 'bg-green-500/[0.08] border-green-500/20' : 'bg-red-500/[0.08] border-red-500/20'}`}>
+              <div className={`rounded-xl p-4 mb-3 border ${selectedAnswer === problems[currentIndex].correct_answer ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
                 <div className="text-xs font-bold mb-1" style={{ color: selectedAnswer === problems[currentIndex].correct_answer ? '#34d399' : '#f87171' }}>
                   {selectedAnswer === problems[currentIndex].correct_answer
                     ? (consecutiveCorrect >= 3 ? '🔥 완벽해요! 연속 정답 보너스!' : '👏 정확해요!')
                     : '아깝다! 핵심 포인트를 확인해봐요'}
                 </div>
               </div>
-              <div className="bg-amber-500/[0.08] border border-amber-500/20 rounded-xl p-4 mb-4">
-                <h3 className="font-semibold text-amber-300 text-xs mb-1.5">해설</h3>
-                <p className="text-xs text-amber-200/80 leading-relaxed whitespace-pre-wrap">{problem.explanation}</p>
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
+                <h3 className="font-semibold text-amber-700 text-xs mb-1.5">해설</h3>
+                <p className="text-xs text-amber-600 leading-relaxed whitespace-pre-wrap">{problem.explanation}</p>
               </div>
               <button onClick={nextProblem} className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-medium">
                 {currentIndex + 1 >= problems.length ? '결과 보기' : '다음 문제'}
@@ -827,45 +831,45 @@ export default function Home() {
     const msg = pct >= 100 ? '퍼펙트! 이 유형은 완전 정복!' : pct >= 80 ? '대단해요! 거의 다 왔어요' : pct >= 60 ? '좋은 시작! 한 번 더 하면 확 달라질 거예요' : '괜찮아요, 틀린 만큼 배우는 거예요';
 
     return (
-      <div className="min-h-screen bg-gray-950 pb-20">
+      <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
         <div className="max-w-xl mx-auto px-4 py-8">
           {/* 점수 */}
           <div className="text-center mb-5">
             <div className="text-4xl mb-2">{emoji}</div>
-            <h2 className="text-xl font-extrabold text-white">{score.correct}/{score.total}</h2>
+            <h2 className="text-xl font-extrabold text-gray-900">{score.correct}/{score.total}</h2>
             <p className="text-sm text-gray-500">정답률 {pct}%</p>
-            <p className="text-xs text-violet-400 mt-1">{msg}</p>
+            <p className="text-xs text-violet-600 mt-1">{msg}</p>
           </div>
 
           {/* 보상 */}
-          <div className="bg-yellow-500/[0.08] border border-yellow-500/20 rounded-2xl p-4 mb-4">
-            <div className="text-xs font-bold text-yellow-400 mb-2">🎁 획득한 보상</div>
+          <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4 mb-4">
+            <div className="text-xs font-bold text-yellow-600 mb-2">🎁 획득한 보상</div>
             <div className="flex gap-2">
-              <div className="flex-1 text-center bg-black/20 rounded-xl py-2.5"><div className="text-lg">⭐</div><div className="text-[10px] text-yellow-400">+{earnedXp} XP</div></div>
-              <div className="flex-1 text-center bg-black/20 rounded-xl py-2.5"><div className="text-lg">💰</div><div className="text-[10px] text-yellow-400">+{earnedQp} QP</div></div>
-              <div className="flex-1 text-center bg-black/20 rounded-xl py-2.5"><div className="text-lg">🔥</div><div className="text-[10px] text-yellow-400">{game.streak}일 연속</div></div>
+              <div className="flex-1 text-center bg-gray-100 rounded-xl py-2.5"><div className="text-lg">⭐</div><div className="text-[10px] text-yellow-600">+{earnedXp} XP</div></div>
+              <div className="flex-1 text-center bg-gray-100 rounded-xl py-2.5"><div className="text-lg">💰</div><div className="text-[10px] text-yellow-600">+{earnedQp} QP</div></div>
+              <div className="flex-1 text-center bg-gray-100 rounded-xl py-2.5"><div className="text-lg">🔥</div><div className="text-[10px] text-yellow-600">{game.streak}일 연속</div></div>
             </div>
           </div>
 
           {/* 레벨 진행 */}
-          <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-4 mb-4">
+          <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-4 mb-4">
             <div className="flex justify-between text-[11px] mb-1">
-              <span className="text-white font-semibold">Lv.{game.level} {levelTitle(game.level)}</span>
-              <span className="text-violet-400">{Math.round((game.xp / xpForLevel(game.level)) * 100)}%</span>
+              <span className="text-gray-900 font-semibold">Lv.{game.level} {levelTitle(game.level)}</span>
+              <span className="text-violet-600">{Math.round((game.xp / xpForLevel(game.level)) * 100)}%</span>
             </div>
             <XpBar />
           </div>
 
           {/* 틀린 문제 */}
           {wrongOnes.length > 0 && (
-            <div className="bg-red-500/[0.05] border border-red-500/15 rounded-2xl p-4 mb-4">
-              <div className="text-xs font-bold text-red-400 mb-2">❌ 틀린 {wrongOnes.length}문제 → 오답 노트에 저장됨</div>
+            <div className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-4">
+              <div className="text-xs font-bold text-red-600 mb-2">❌ 틀린 {wrongOnes.length}문제 → 오답 노트에 저장됨</div>
               {wrongOnes.map((w, i) => (
-                <div key={i} className="bg-black/20 rounded-lg p-2.5 mb-1.5">
+                <div key={i} className="bg-gray-100 rounded-lg p-2.5 mb-1.5">
                   <p className="text-[10px] text-gray-400 line-clamp-1">{w.question}</p>
                   <div className="flex gap-2 text-[10px] mt-1">
-                    <span className="text-red-400">내 답: {w.studentAnswer}번</span>
-                    <span className="text-green-400">정답: {w.correctAnswer}번</span>
+                    <span className="text-red-600">내 답: {w.studentAnswer}번</span>
+                    <span className="text-green-600">정답: {w.correctAnswer}번</span>
                   </div>
                 </div>
               ))}
@@ -878,7 +882,7 @@ export default function Home() {
             {wrongOnes.length > 0 && <button onClick={() => { setCurrentIndex(0); setSelectedAnswer(null); setShowExplanation(false); setScore({correct:0,total:0}); setQuizAnswers([]); setConsecutiveCorrect(0); setMode('quiz'); }}
               className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-600 to-yellow-500 text-black font-bold text-sm">⚡ 같은 문제 다시 풀기</button>}
             <button onClick={goScan} className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-medium">📷 새 시험지 스캔</button>
-            <button onClick={resetAll} className="w-full py-3 rounded-xl bg-white/[0.05] text-violet-400 font-medium">🏠 홈으로</button>
+            <button onClick={resetAll} className="w-full py-3 rounded-xl bg-violet-50 border border-violet-200 text-violet-600 font-medium">🏠 홈으로</button>
           </div>
         </div>
         <BottomNav />
@@ -891,28 +895,28 @@ export default function Home() {
   // 퀘스트 탭
   // ═══════════════════════════════════════
   if (mode === 'quest') return (
-    <div className="min-h-screen bg-gray-950 pb-20">
+    <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
       <div className="max-w-xl mx-auto px-4 py-6">
-        <h1 className="text-xl font-bold text-white text-center mb-5">🎮 퀘스트</h1>
-        <div className="bg-white/[0.03] border border-violet-500/20 rounded-2xl p-4 mb-4">
-          <div className="text-xs font-bold text-violet-400 mb-3">📋 일일 미션</div>
+        <h1 className="text-xl font-bold text-gray-900 text-center mb-5">🎮 퀘스트</h1>
+        <div className="bg-white shadow-sm border border-violet-200 rounded-2xl p-4 mb-4">
+          <div className="text-xs font-bold text-violet-600 mb-3">📋 일일 미션</div>
           {[
             { text: '문제 3개 풀기', target: 3, current: game.totalSolved, qp: 30 },
             { text: '새 시험지 스캔', target: 1, current: 0, qp: 50 },
             { text: '오답 특훈 1회', target: 1, current: 0, qp: 40 },
           ].map((m, i) => (
-            <div key={i} className="flex items-center gap-3 py-2 border-b border-white/[0.04] last:border-0">
+            <div key={i} className="flex items-center gap-3 py-2 border-b border-gray-100 last:border-0">
               <span className="text-sm">{Math.min(m.current, m.target) >= m.target ? '✅' : '📝'}</span>
               <div className="flex-1">
-                <div className={`text-xs ${m.current >= m.target ? 'text-gray-500 line-through' : 'text-white'}`}>{m.text}</div>
-                <div className="h-1 bg-white/5 rounded-full mt-1 overflow-hidden"><div className="h-full bg-violet-500 rounded-full" style={{ width: `${Math.min((m.current / m.target) * 100, 100)}%` }} /></div>
+                <div className={`text-xs ${m.current >= m.target ? 'text-gray-500 line-through' : 'text-gray-900'}`}>{m.text}</div>
+                <div className="h-1 bg-gray-100 rounded-full mt-1 overflow-hidden"><div className="h-full bg-violet-500 rounded-full" style={{ width: `${Math.min((m.current / m.target) * 100, 100)}%` }} /></div>
               </div>
-              <span className="text-[10px] text-yellow-400 font-semibold">+{m.qp} QP</span>
+              <span className="text-[10px] text-yellow-600 font-semibold">+{m.qp} QP</span>
             </div>
           ))}
         </div>
-        <div className="bg-white/[0.02] border border-white/[0.05] rounded-2xl p-4 opacity-50">
-          <div className="text-xs font-bold text-yellow-400 mb-2">🏆 주간 챌린지</div>
+        <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-4 opacity-50">
+          <div className="text-xs font-bold text-yellow-600 mb-2">🏆 주간 챌린지</div>
           <p className="text-[11px] text-gray-500">Lv.5 달성 시 해금됩니다</p>
         </div>
       </div>
@@ -924,35 +928,35 @@ export default function Home() {
   // 프로필
   // ═══════════════════════════════════════
   if (mode === 'profile') return (
-    <div className="min-h-screen bg-gray-950 pb-20">
+    <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
       <div className="max-w-xl mx-auto px-4 py-6">
         <div className="text-center mb-5">
           <div className="w-16 h-16 rounded-full bg-gradient-to-br from-violet-600 to-violet-400 flex items-center justify-center text-3xl mx-auto mb-2 border-3 border-yellow-400/50">🧠</div>
-          <h2 className="text-lg font-extrabold text-white">Lv.{game.level} {levelTitle(game.level)}</h2>
+          <h2 className="text-lg font-extrabold text-gray-900">Lv.{game.level} {levelTitle(game.level)}</h2>
           <XpBar />
         </div>
         <div className="grid grid-cols-3 gap-2 mb-4">
           {[
-            { v: game.totalSolved, l: '총 문제', c: 'text-white' },
-            { v: game.qp, l: 'QP', c: 'text-yellow-400' },
-            { v: `${game.streak}일`, l: '🔥 연속', c: 'text-red-400' },
+            { v: game.totalSolved, l: '총 문제', c: 'text-gray-900' },
+            { v: game.qp, l: 'QP', c: 'text-yellow-600' },
+            { v: `${game.streak}일`, l: '🔥 연속', c: 'text-red-600' },
           ].map((s, i) => (
-            <div key={i} className="bg-white/[0.03] rounded-xl p-3 text-center">
+            <div key={i} className="bg-white shadow-sm rounded-xl p-3 text-center">
               <div className={`text-base font-extrabold ${s.c}`}>{s.v}</div>
               <div className="text-[9px] text-gray-500">{s.l}</div>
             </div>
           ))}
         </div>
         {game.categories.length > 0 && (
-          <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-4 mb-4">
-            <div className="text-xs font-bold text-white mb-2">🏷 내 카테고리</div>
-            <div className="flex gap-1.5 flex-wrap">{game.categories.map(c => <span key={c} className="px-2.5 py-1 bg-violet-500/15 text-violet-400 text-[10px] rounded-lg">{c}</span>)}</div>
+          <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-4 mb-4">
+            <div className="text-xs font-bold text-gray-900 mb-2">🏷 내 카테고리</div>
+            <div className="flex gap-1.5 flex-wrap">{game.categories.map(c => <span key={c} className="px-2.5 py-1 bg-violet-100 text-violet-600 text-[10px] rounded-lg">{c}</span>)}</div>
           </div>
         )}
-        <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-4">
-          <div className="text-xs font-bold text-white mb-2">🏅 뱃지</div>
+        <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-4">
+          <div className="text-xs font-bold text-gray-900 mb-2">🏅 뱃지</div>
           <div className="flex gap-2">
-            {[1,2,3,4].map(i => <div key={i} className="w-10 h-10 rounded-xl bg-white/5 border border-dashed border-white/10 flex items-center justify-center text-sm text-gray-600">🔒</div>)}
+            {[1,2,3,4].map(i => <div key={i} className="w-10 h-10 rounded-xl bg-gray-100 border border-dashed border-gray-200 flex items-center justify-center text-sm text-gray-600">🔒</div>)}
           </div>
           <p className="text-[10px] text-gray-500 mt-2">과목별 정답률 80% + 20문제 이상 풀면 뱃지 획득!</p>
         </div>
@@ -963,3 +967,4 @@ export default function Home() {
 
   return null;
 }
+
