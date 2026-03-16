@@ -88,7 +88,7 @@ export default function Home() {
     'loading' | 'onboard1' | 'onboard2' | 'onboard3' | 'choice' |
     'home' | 'scan' | 'parsed' | 'quiz' | 'result' | 'quest' | 'profile'
   >('loading');
-  const [tab, setTab] = useState<'photo' | 'unit'>('photo');
+  const [tab, setTab] = useState<'photo' | 'unit' | 'topics'>('photo');
   const [activeNav, setActiveNav] = useState<'home' | 'scan' | 'quest' | 'analysis' | 'profile'>('home');
 
   // 게이미피케이션
@@ -111,6 +111,12 @@ export default function Home() {
   const [units, setUnits] = useState<Unit[]>([]);
   const [selectedUnit, setSelectedUnit] = useState<string>('');
   const [selectedUnitName, setSelectedUnitName] = useState<string>('');
+
+  // 오답 기반 토픽 상태
+  interface TopicEntry { topic: string; wrongCount: number; keywords: string[]; lastSeen: string; }
+  interface SubjectGroup { subject: string; totalWrong: number; topics: TopicEntry[]; }
+  const [topicGroups, setTopicGroups] = useState<SubjectGroup[]>([]);
+  const [selectedTopic, setSelectedTopic] = useState<{ subject: string; topic: string; keywords: string[] } | null>(null);
 
   // 퀴즈 공통 상태
   const [difficulty, setDifficulty] = useState<number>(2);
@@ -140,6 +146,7 @@ export default function Home() {
 
   useEffect(() => {
     fetch('/api/units').then(r => r.json()).then(d => setUnits(d.units || [])).catch(() => {});
+    fetch('/api/topics').then(r => r.json()).then(d => setTopicGroups(d.topics || [])).catch(() => {});
   }, []);
 
   // ─── 게이미피케이션 보상 ───
@@ -231,6 +238,26 @@ export default function Home() {
   };
 
   // ─── 단원 기반 생성 ───
+  // ─── 토픽 기반 문제 생성 (오답에서 확장) ───
+  const generateFromTopic = async () => {
+    if (!selectedTopic) return;
+    setLoading(true);
+    try {
+      const res = await fetch('/api/generate-by-topic', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subject: selectedTopic.subject, topic: selectedTopic.topic, keywords: selectedTopic.keywords, difficulty, count }),
+      });
+      const data = await res.json();
+      if (data.problems) {
+        setProblems(data.problems);
+        setCurrentIndex(0); setSelectedAnswer(null); setShowExplanation(false);
+        setScore({ correct: 0, total: 0 }); setQuizAnswers([]); setConsecutiveCorrect(0);
+        setMode('quiz');
+      }
+    } catch { console.error('토픽 문제 생성 실패'); }
+    finally { setLoading(false); }
+  };
+
   const generateFromUnit = async () => {
     if (!selectedUnit) return;
     setLoading(true);
@@ -423,7 +450,7 @@ export default function Home() {
         <div className="text-6xl mb-4">🎯</div>
         <div className="flex gap-2 flex-wrap justify-center">
           <span className="px-3 py-1.5 rounded-lg text-xs bg-red-100 text-red-600">수학 42%</span>
-          <span className="px-3 py-1.5 rounded-lg text-xs bg-yellow-100 text-yellow-600">과학 71%</span>
+          <span className="px-3 py-1.5 rounded-lg text-xs bg-yellow-100 text-yellow-600">약점 분석</span>
           <span className="px-3 py-1.5 rounded-lg text-xs bg-green-100 text-green-600">영어 88%</span>
         </div>
       </div>
@@ -586,8 +613,9 @@ export default function Home() {
 
         {/* 탭 */}
         <div className="flex bg-gray-100 rounded-xl p-1 mb-4">
-          <button onClick={() => setTab('photo')} className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'photo' ? 'bg-violet-600 text-white' : 'text-gray-500'}`}>📷 사진으로 풀기</button>
-          <button onClick={() => setTab('unit')} className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'unit' ? 'bg-violet-600 text-white' : 'text-gray-500'}`}>📚 단원 선택</button>
+          <button onClick={() => setTab('photo')} className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${tab === 'photo' ? 'bg-violet-600 text-white' : 'text-gray-500'}`}>📷 사진</button>
+          <button onClick={() => { setTab('topics'); fetch('/api/topics').then(r => r.json()).then(d => setTopicGroups(d.topics || [])).catch(() => {}); }} className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${tab === 'topics' ? 'bg-violet-600 text-white' : 'text-gray-500'}`}>🎯 약점 연습</button>
+          <button onClick={() => setTab('unit')} className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${tab === 'unit' ? 'bg-violet-600 text-white' : 'text-gray-500'}`}>📚 단원</button>
         </div>
 
         {/* 사진 탭 */}
@@ -637,11 +665,68 @@ export default function Home() {
         )}
 
         {/* 단원 탭 */}
+        {/* 약점 연습 탭 */}
+        {tab === 'topics' && (
+          <>
+            <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-5 mb-4">
+              <h2 className="text-sm font-semibold text-gray-900 mb-1">내 약점 주제</h2>
+              <p className="text-xs text-gray-500 mb-3">틀린 문제에서 자동으로 수집됩니다</p>
+              {topicGroups.length === 0 ? (
+                <div className="text-center py-8">
+                  <div className="text-3xl mb-2">📷</div>
+                  <p className="text-sm text-gray-500">아직 데이터가 없어요</p>
+                  <p className="text-xs text-gray-400 mt-1">사진으로 문제를 풀면 약점이 자동으로 쌓여요!</p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {topicGroups.map(group => (
+                    <details key={group.subject} className="group" open>
+                      <summary className="cursor-pointer py-1.5 px-3 rounded-lg hover:bg-gray-100 font-medium text-gray-700 text-xs flex justify-between items-center">
+                        <span>{group.subject}</span>
+                        <span className="text-violet-500 bg-violet-50 px-2 py-0.5 rounded-full text-[10px]">{group.totalWrong}회 오답</span>
+                      </summary>
+                      <div className="ml-2 mt-1 space-y-0.5">
+                        {group.topics.map(t => (
+                          <button key={t.topic} onClick={() => setSelectedTopic({ subject: group.subject, topic: t.topic, keywords: t.keywords })}
+                            className={`w-full text-left py-1.5 px-3 rounded-lg text-xs transition-colors flex justify-between items-center ${selectedTopic?.topic === t.topic && selectedTopic?.subject === group.subject ? 'bg-violet-100 text-violet-600 font-medium' : 'text-gray-500 hover:bg-gray-50'}`}>
+                            <span>{t.topic}</span>
+                            <span className="text-[10px] text-gray-400">{t.wrongCount}회</span>
+                          </button>
+                        ))}
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              )}
+              {selectedTopic && <div className="mt-2 text-xs text-violet-600 bg-violet-100 px-3 py-1.5 rounded-lg">선택: {selectedTopic.subject} &gt; {selectedTopic.topic}</div>}
+            </div>
+            {selectedTopic && (
+              <>
+                <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-5 mb-4">
+                  <div className="flex gap-4">
+                    <div className="flex-1">
+                      <label className="text-xs font-medium text-gray-400 mb-1.5 block">난이도</label>
+                      <div className="flex gap-1.5">{[1,2,3].map(d => <button key={d} onClick={() => setDifficulty(d)} className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${difficulty === d ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500'}`}>{diffLabels[d]}</button>)}</div>
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-xs font-medium text-gray-400 mb-1.5 block">문제 수</label>
+                      <select value={count} onChange={e => setCount(Number(e.target.value))} className="w-full py-1.5 px-2 rounded-lg border border-gray-200 bg-gray-100 text-sm text-gray-900">{[3,5,10].map(n => <option key={n} value={n}>{n}문제</option>)}</select>
+                    </div>
+                  </div>
+                </div>
+                <button onClick={generateFromTopic} disabled={loading} className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold disabled:bg-gray-200 disabled:text-gray-400 transition-colors">
+                  {loading ? '문제 생성 중...' : '약점 집중 연습'}
+                </button>
+              </>
+            )}
+          </>
+        )}
+
         {tab === 'unit' && (
           <>
             <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-5 mb-4">
               <h2 className="text-sm font-semibold text-gray-900 mb-1">단원 선택</h2>
-              <p className="text-xs text-gray-500 mb-3">중2 과학 · 천재교과서</p>
+              <p className="text-xs text-gray-500 mb-3">등록된 단원에서 선택</p>
               <div className="space-y-1.5 max-h-64 overflow-y-auto">
                 {units.map(l1 => (
                   <details key={l1.id} className="group">

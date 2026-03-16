@@ -2,14 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { getServiceClient } from '@/lib/supabase';
 
-const SYSTEM_PROMPT = `너는 중학교 과학 문제 출제 전문가야. 2022 개정 교육과정 기준으로 중학교 2학년 과학 문제를 생성한다.
+function buildSystemPrompt(unitTitle?: string, unitCode?: string): string {
+  const context = unitTitle ? `\n현재 출제 범위: ${unitTitle} (${unitCode || ''})` : '';
+  return `너는 시험/자격증 문제 출제 전문가야. 주어진 단원/과목의 문제를 정확하게 생성한다.${context}
 
 ## 출제 원칙
-- 교과서 본문 수준의 정확한 과학 지식 기반
+- 해당 분야의 정확한 지식 기반
 - 하나의 명확한 정답만 존재
-- 매력적 오답은 학생의 흔한 오개념에서 설계
+- 매력적 오답은 학습자의 흔한 오개념에서 설계
 - 해설은 "왜 정답인지" + "왜 오답인지" 모두 포함
-- 한국 중학교 지필평가(중간/기말) 스타일
+- 실제 시험 스타일에 맞춰 출제
 
 ## 출력 형식
 반드시 JSON 배열로 출력. 마크다운 코드블록 없이 순수 JSON만.
@@ -34,13 +36,15 @@ const SYSTEM_PROMPT = `너는 중학교 과학 문제 출제 전문가야. 2022 
 5 = 평가 (옳고 그름 판단)
 
 ## question_type
-- multiple_choice: 5지선다
+- multiple_choice: 4~5지선다
 - box_select: 보기형 (ㄱ,ㄴ,ㄷ 조합)
+- short_answer: 단답형/주관식
 
 ## 난이도별 특성
-- 난이도 1(하): 교과서 본문에서 직접 답을 찾을 수 있는 수준. 단순 기억/이해.
-- 난이도 2(중): 개념을 응용하거나 약간의 계산/추론 필요.
-- 난이도 3(상): 복합 개념, 자료 분석, 실험 설계 수준.`;
+- 난이도 1(하): 기본 개념을 직접 묻는 수준. 단순 기억/이해.
+- 난이도 2(중): 개념을 응용하거나 약간의 추론 필요.
+- 난이도 3(상): 복합 개념, 자료 분석, 심화 문제.`;
+}
 
 const diffLabel: Record<number, string> = { 1: '하', 2: '중', 3: '상' };
 
@@ -91,11 +95,11 @@ export async function POST(request: NextRequest) {
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4096,
-      system: SYSTEM_PROMPT,
+      system: buildSystemPrompt(unit.title, unit.code),
       messages: [
         {
           role: 'user',
-          content: `다음 조건으로 과학 문제를 ${needed}개 생성해줘.\n\n- 교과서: 천재교과서 과학2 (정대홍, 2022개정)\n- 단원: ${unit.title} (${unit.code})\n- 난이도: ${difficulty} (${diffLabel[difficulty]})\n- bloom_level 분포: 다양하게 섞어서\n\nJSON 배열로만 출력해.`,
+          content: `다음 조건으로 문제를 ${needed}개 생성해줘.\n\n- 범위: ${unit.title} (${unit.code})\n- 난이도: ${difficulty} (${diffLabel[difficulty]})\n- bloom_level 분포: 다양하게 섞어서\n\nJSON 배열로만 출력해.`,
         },
       ],
     });
