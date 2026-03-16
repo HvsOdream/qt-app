@@ -242,12 +242,25 @@ export default function Home() {
       const res = await fetch('/api/parse-image', { method: 'POST', body: formData });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      setParseResult(data);
+      // is_wrong 보정: AI 시각 판별보다 marked_answer vs correct_answer 비교가 정확
+      const corrected = {
+        ...data,
+        problems: data.problems.map((p: ParsedProblem) => {
+          if (p.marked_answer && p.correct_answer) {
+            // 둘 다 있으면 코드에서 직접 비교
+            const isWrong = String(p.marked_answer).trim() !== String(p.correct_answer).trim();
+            return { ...p, is_wrong: isWrong };
+          }
+          // 둘 중 하나라도 없으면 AI 판별 유지
+          return p;
+        }),
+      };
+      setParseResult(corrected);
       // 틀린 문제만 자동 선택 (is_wrong=true). 판별 불가능하면 전체 선택
-      const wrongIdxs = data.problems
+      const wrongIdxs = corrected.problems
         .map((p: ParsedProblem, i: number) => p.is_wrong === true ? i : -1)
         .filter((i: number) => i >= 0);
-      setSelectedParsedIdx(wrongIdxs.length > 0 ? wrongIdxs : data.problems.map((_: ParsedProblem, i: number) => i));
+      setSelectedParsedIdx(wrongIdxs.length > 0 ? wrongIdxs : corrected.problems.map((_: ParsedProblem, i: number) => i));
       // 자동 카테고리 추가
       if (data.overall_subject) {
         setGame(prev => {
