@@ -138,6 +138,13 @@ export default function Home() {
   const [score, setScore] = useState({ correct: 0, total: 0 });
   const [quizAnswers, setQuizAnswers] = useState<{ question: string; studentAnswer: string; correctAnswer: string; isCorrect: boolean; subject?: string; topic?: string; keywords?: string[] }[]>([]);
 
+  // ─── PWA 서비스워커 등록 ───
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+  }, []);
+
   // ─── Auth 초기화 ───
   useEffect(() => {
     // 현재 세션 확인
