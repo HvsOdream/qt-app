@@ -14,6 +14,7 @@ export async function POST(request: NextRequest) {
       topic,
       keywords,
       wrong_answer_id,
+      user_id,
     } = body;
 
     const supabase = getServiceClient();
@@ -28,6 +29,7 @@ export async function POST(request: NextRequest) {
       topic: topic || null,
       keywords: keywords || [],
       wrong_answer_id: wrong_answer_id || null,
+      user_id: user_id || null,
     });
 
     return NextResponse.json({ success: true });

@@ -1,15 +1,25 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getServiceClient } from '@/lib/supabase';
 
 // 사용자의 오답 데이터에서 과목 → 주제 트리를 동적으로 생성
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get('user_id');
+
     const supabase = getServiceClient();
 
-    const { data: wrongAnswers, error } = await supabase
+    let query = supabase
       .from('wrong_answers')
       .select('subject, topic, keywords, created_at')
       .order('created_at', { ascending: false });
+
+    // user_id가 있으면 해당 유저의 데이터만 필터
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
+    const { data: wrongAnswers, error } = await query;
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

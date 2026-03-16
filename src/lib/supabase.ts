@@ -18,3 +18,45 @@ export function getServiceClient() {
   const serviceKey = process.env.SUPABASE_SERVICE_KEY!;
   return createClient(url, serviceKey);
 }
+
+// ─── Auth 헬퍼 ───
+export async function signInWithGoogle() {
+  if (!supabase) return;
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: `${window.location.origin}/auth/callback`,
+    },
+  });
+  if (error) console.error('Google 로그인 오류:', error.message);
+}
+
+export async function signInWithEmail(email: string) {
+  if (!supabase) return { error: 'Supabase 미설정' };
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: {
+      emailRedirectTo: `${window.location.origin}/auth/callback`,
+    },
+  });
+  if (error) return { error: error.message };
+  return { error: null };
+}
+
+export async function signOut() {
+  if (!supabase) return;
+  await supabase.auth.signOut();
+}
+
+export async function getUser() {
+  if (!supabase) return null;
+  const { data: { user } } = await supabase.auth.getUser();
+  return user;
+}
+
+export function onAuthStateChange(callback: (user: unknown) => void) {
+  if (!supabase) return { data: { subscription: { unsubscribe: () => {} } } };
+  return supabase.auth.onAuthStateChange((_event, session) => {
+    callback(session?.user ?? null);
+  });
+}

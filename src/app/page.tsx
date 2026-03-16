@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { supabase, signInWithGoogle, signInWithEmail, signOut, onAuthStateChange } from '@/lib/supabase';
+import type { User } from '@supabase/supabase-js';
 
 // ─── 타입 ───
 interface ParsedProblem {
@@ -83,9 +85,16 @@ function levelTitle(lv: number) {
 
 // ─── 메인 컴포넌트 ───
 export default function Home() {
+  // Auth 상태
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [magicLinkEmail, setMagicLinkEmail] = useState('');
+  const [magicLinkSent, setMagicLinkSent] = useState(false);
+  const [magicLinkError, setMagicLinkError] = useState('');
+
   // 화면 모드
   const [mode, setMode] = useState<
-    'loading' | 'onboard1' | 'onboard2' | 'onboard3' | 'choice' |
+    'loading' | 'login' | 'onboard1' | 'onboard2' | 'onboard3' | 'choice' |
     'home' | 'scan' | 'parsed' | 'quiz' | 'result' | 'quest' | 'profile'
   >('loading');
   const [tab, setTab] = useState<'photo' | 'unit' | 'topics'>('photo');
@@ -129,25 +138,56 @@ export default function Home() {
   const [score, setScore] = useState({ correct: 0, total: 0 });
   const [quizAnswers, setQuizAnswers] = useState<{ question: string; studentAnswer: string; correctAnswer: string; isCorrect: boolean; subject?: string; topic?: string; keywords?: string[] }[]>([]);
 
-  // ─── 초기화 ───
+  // ─── Auth 초기화 ───
   useEffect(() => {
+    // 현재 세션 확인
+    const checkSession = async () => {
+      if (!supabase) { setAuthLoading(false); setMode('login'); return; }
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        setUser(session.user);
+        initGame();
+      } else {
+        setMode('login');
+      }
+      setAuthLoading(false);
+    };
+    checkSession();
+
+    // Auth 상태 리스너
+    const { data: { subscription } } = onAuthStateChange((u) => {
+      const authUser = u as User | null;
+      setUser(authUser);
+      if (authUser) {
+        initGame();
+      } else {
+        setMode('login');
+      }
+    });
+    return () => subscription.unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ─── 게임 초기화 (로그인 후) ───
+  const initGame = () => {
     const g = loadGame();
     setGame(g);
-    // 스트릭 체크
     const today = new Date().toISOString().slice(0, 10);
     if (g.lastPlayDate && g.lastPlayDate !== today) {
       const last = new Date(g.lastPlayDate);
       const diff = Math.floor((new Date(today).getTime() - last.getTime()) / 86400000);
       if (diff > 1) { g.streak = 0; saveGame(g); setGame({ ...g }); }
     }
-    // 온보딩 완료 여부
     setMode(g.onboardDone ? 'home' : 'onboard1');
-  }, []);
+  };
 
+  // ─── 데이터 로드 (로그인 후) ───
   useEffect(() => {
-    fetch('/api/units').then(r => r.json()).then(d => setUnits(d.units || [])).catch(() => {});
-    fetch('/api/topics').then(r => r.json()).then(d => setTopicGroups(d.topics || [])).catch(() => {});
-  }, []);
+    if (!user) return;
+    const uid = user.id;
+    fetch(`/api/units`).then(r => r.json()).then(d => setUnits(d.units || [])).catch(() => {});
+    fetch(`/api/topics?user_id=${uid}`).then(r => r.json()).then(d => setTopicGroups(d.topics || [])).catch(() => {});
+  }, [user]);
 
   // ─── 게이미피케이션 보상 ───
   const grantReward = useCallback((xp: number, qp: number) => {
@@ -222,7 +262,7 @@ export default function Home() {
         const original = parseResult.problems[idx];
         const res = await fetch('/api/generate-similar', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ originalProblem: original, count: Math.max(1, Math.floor(count / selectedParsedIdx.length)), difficulty }),
+          body: JSON.stringify({ originalProblem: original, count: Math.max(1, Math.floor(count / selectedParsedIdx.length)), difficulty, user_id: user?.id }),
         });
         const data = await res.json();
         if (data.problems) allProblems.push(...data.problems);
@@ -245,7 +285,7 @@ export default function Home() {
     try {
       const res = await fetch('/api/generate-by-topic', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subject: selectedTopic.subject, topic: selectedTopic.topic, keywords: selectedTopic.keywords, difficulty, count }),
+        body: JSON.stringify({ subject: selectedTopic.subject, topic: selectedTopic.topic, keywords: selectedTopic.keywords, difficulty, count, user_id: user?.id }),
       });
       const data = await res.json();
       if (data.problems) {
@@ -308,7 +348,7 @@ export default function Home() {
     try {
       await fetch('/api/save-result', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question_text: problem.question_text, choices: problem.choices, correct_answer: problem.correct_answer, student_answer: answer, is_correct: isCorrect, subject: problem.subject || null, topic: problem.topic || null, keywords: problem.keywords || [] }),
+        body: JSON.stringify({ question_text: problem.question_text, choices: problem.choices, correct_answer: problem.correct_answer, student_answer: answer, is_correct: isCorrect, subject: problem.subject || null, topic: problem.topic || null, keywords: problem.keywords || [], user_id: user?.id }),
       });
     } catch { /* ignore */ }
   };
@@ -411,11 +451,78 @@ export default function Home() {
   // ═══════════════════════════════════════
   // 로딩
   // ═══════════════════════════════════════
-  if (mode === 'loading') return (
+  if (mode === 'loading' || authLoading) return (
     <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white flex items-center justify-center">
       <div className="text-center">
         <h1 className="text-4xl font-black text-gray-900">Q<span className="text-violet-600">T</span></h1>
         <p className="text-gray-600 text-sm mt-2">틀린 문제가 경험치가 되는 곳</p>
+      </div>
+    </div>
+  );
+
+  // ═══════════════════════════════════════
+  // 로그인
+  // ═══════════════════════════════════════
+  if (mode === 'login') return (
+    <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white flex flex-col items-center justify-center px-7">
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-10">
+          <h1 className="text-5xl font-black text-gray-900 mb-2">Q<span className="text-violet-600">T</span></h1>
+          <p className="text-gray-500 text-sm">틀린 문제가 경험치가 되는 곳</p>
+        </div>
+
+        {/* Google 로그인 */}
+        <button
+          onClick={signInWithGoogle}
+          className="w-full flex items-center justify-center gap-3 py-3.5 rounded-2xl bg-white border border-gray-200 shadow-sm text-gray-700 font-medium text-sm hover:bg-gray-50 active:scale-[0.98] transition-all mb-3"
+        >
+          <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+          Google로 시작하기
+        </button>
+
+        {/* 구분선 */}
+        <div className="flex items-center gap-3 my-5">
+          <div className="flex-1 h-px bg-gray-200" />
+          <span className="text-xs text-gray-400">또는</span>
+          <div className="flex-1 h-px bg-gray-200" />
+        </div>
+
+        {/* 이메일 매직링크 */}
+        {!magicLinkSent ? (
+          <div>
+            <input
+              type="email"
+              placeholder="이메일 주소 입력"
+              value={magicLinkEmail}
+              onChange={e => { setMagicLinkEmail(e.target.value); setMagicLinkError(''); }}
+              className="w-full py-3.5 px-4 rounded-2xl border border-gray-200 text-sm focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 mb-3"
+            />
+            {magicLinkError && <p className="text-xs text-red-500 mb-2 px-1">{magicLinkError}</p>}
+            <button
+              onClick={async () => {
+                if (!magicLinkEmail.includes('@')) { setMagicLinkError('올바른 이메일을 입력해주세요'); return; }
+                const result = await signInWithEmail(magicLinkEmail);
+                if (result?.error) { setMagicLinkError(result.error); }
+                else { setMagicLinkSent(true); }
+              }}
+              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold text-sm active:scale-[0.98] transition-transform"
+            >
+              이메일로 로그인 링크 받기
+            </button>
+          </div>
+        ) : (
+          <div className="text-center bg-green-50 border border-green-200 rounded-2xl p-5">
+            <div className="text-3xl mb-2">📧</div>
+            <p className="text-sm font-bold text-green-800 mb-1">메일을 보냈어요!</p>
+            <p className="text-xs text-green-600">{magicLinkEmail}로 보낸<br/>링크를 클릭하면 바로 로그인됩니다</p>
+            <button onClick={() => { setMagicLinkSent(false); setMagicLinkEmail(''); }} className="text-xs text-gray-500 mt-3 underline">다른 이메일로 시도</button>
+          </div>
+        )}
+
+        <p className="text-xs text-gray-400 text-center mt-8 leading-relaxed">
+          로그인하면 기기 간 학습 기록이 동기화됩니다.<br/>
+          비밀번호 없이 안전하게 시작하세요.
+        </p>
       </div>
     </div>
   );
@@ -1072,12 +1179,24 @@ export default function Home() {
             <div className="flex gap-1.5 flex-wrap">{game.categories.map(c => <span key={c} className="px-2.5 py-1 bg-violet-100 text-violet-600 text-xs rounded-lg">{c}</span>)}</div>
           </div>
         )}
-        <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-4">
+        <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-4 mb-4">
           <div className="text-xs font-bold text-gray-900 mb-2">🏅 뱃지</div>
           <div className="flex gap-2">
             {[1,2,3,4].map(i => <div key={i} className="w-10 h-10 rounded-xl bg-gray-100 border border-dashed border-gray-200 flex items-center justify-center text-sm text-gray-600">🔒</div>)}
           </div>
           <p className="text-xs text-gray-500 mt-2">과목별 정답률 80% + 20문제 이상 풀면 뱃지 획득!</p>
+        </div>
+
+        {/* 계정 정보 + 로그아웃 */}
+        <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-4">
+          <div className="text-xs font-bold text-gray-900 mb-2">👤 계정</div>
+          <p className="text-xs text-gray-500 mb-3">{user?.email || user?.user_metadata?.full_name || '로그인됨'}</p>
+          <button
+            onClick={async () => { await signOut(); setUser(null); setMode('login'); }}
+            className="w-full py-2.5 rounded-xl border border-red-200 text-red-500 text-xs font-medium hover:bg-red-50 transition-colors"
+          >
+            로그아웃
+          </button>
         </div>
       </div>
       <BottomNav />
