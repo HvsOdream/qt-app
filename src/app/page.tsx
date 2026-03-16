@@ -726,46 +726,56 @@ export default function Home() {
           <>
             <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-5 mb-4">
               <h2 className="text-sm font-semibold text-gray-900 mb-1">단원 선택</h2>
-              <p className="text-xs text-gray-500 mb-3">등록된 단원에서 선택</p>
-              <div className="space-y-1.5 max-h-64 overflow-y-auto">
-                {units.map(l1 => (
-                  <details key={l1.id} className="group">
-                    <summary className="cursor-pointer py-1.5 px-3 rounded-lg hover:bg-gray-100 font-medium text-gray-700 text-xs">{l1.code}. {l1.title}</summary>
-                    <div className="ml-3 mt-1 space-y-0.5">
-                      {l1.children?.map(l2 => (
-                        <details key={l2.id}>
-                          <summary className="cursor-pointer py-1 px-3 rounded text-xs text-gray-400 hover:bg-gray-100">{l2.code}. {l2.title}</summary>
-                          <div className="ml-3 mt-0.5 space-y-0.5">
-                            {l2.children?.map(l3 => (
-                              <button key={l3.id} onClick={() => { setSelectedUnit(l3.id); setSelectedUnitName(`${l3.code} ${l3.title}`); }}
-                                className={`w-full text-left py-1 px-3 rounded text-xs transition-colors ${selectedUnit === l3.id ? 'bg-violet-100 text-violet-500 font-medium' : 'text-gray-500 hover:bg-gray-100'}`}>
-                                {l3.code}. {l3.title}
-                              </button>
-                            ))}
-                          </div>
-                        </details>
-                      ))}
+              <p className="text-xs text-gray-500 mb-3">문제가 쌓이면 단원이 자동 생성돼요!</p>
+              {topicGroups.length === 0 ? (
+                <div className="text-center py-8">
+                  <div className="text-3xl mb-2">📚</div>
+                  <p className="text-sm text-gray-500">아직 데이터가 부족합니다</p>
+                  <p className="text-xs text-gray-400 mt-1">사진으로 문제를 풀면 단원이 자동으로 만들어져요!</p>
+                  <button onClick={() => setTab('photo')} className="mt-4 px-4 py-2 rounded-xl bg-violet-100 text-violet-600 text-xs font-medium">사진으로 시작하기</button>
+                </div>
+              ) : (
+                <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                  {topicGroups.map(group => (
+                    <details key={group.subject} className="group">
+                      <summary className="cursor-pointer py-1.5 px-3 rounded-lg hover:bg-gray-100 font-medium text-gray-700 text-xs flex justify-between items-center">
+                        <span>{group.subject}</span>
+                        <span className="text-violet-500 bg-violet-50 px-2 py-0.5 rounded-full text-[10px]">{group.topics.length}개 주제</span>
+                      </summary>
+                      <div className="ml-3 mt-1 space-y-0.5">
+                        {group.topics.map(t => (
+                          <button key={t.topic} onClick={() => setSelectedTopic({ subject: group.subject, topic: t.topic, keywords: t.keywords })}
+                            className={`w-full text-left py-1 px-3 rounded text-xs transition-colors flex justify-between items-center ${selectedTopic?.topic === t.topic && selectedTopic?.subject === group.subject ? 'bg-violet-100 text-violet-500 font-medium' : 'text-gray-500 hover:bg-gray-100'}`}>
+                            <span>{t.topic}</span>
+                            <span className="text-[10px] text-gray-400">{t.wrongCount}회</span>
+                          </button>
+                        ))}
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              )}
+              {selectedTopic && <div className="mt-2 text-xs text-violet-600 bg-violet-100 px-3 py-1.5 rounded-lg">선택: {selectedTopic.subject} &gt; {selectedTopic.topic}</div>}
+            </div>
+            {selectedTopic && (
+              <>
+                <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-5 mb-4">
+                  <div className="flex gap-4">
+                    <div className="flex-1">
+                      <label className="text-xs font-medium text-gray-400 mb-1.5 block">난이도</label>
+                      <div className="flex gap-1.5">{[1,2,3].map(d => <button key={d} onClick={() => setDifficulty(d)} className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${difficulty === d ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500'}`}>{diffLabels[d]}</button>)}</div>
                     </div>
-                  </details>
-                ))}
-              </div>
-              {selectedUnit && <div className="mt-2 text-xs text-violet-600 bg-violet-100 px-3 py-1.5 rounded-lg">선택: {selectedUnitName}</div>}
-            </div>
-            <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-5 mb-4">
-              <div className="flex gap-4">
-                <div className="flex-1">
-                  <label className="text-xs font-medium text-gray-400 mb-1.5 block">난이도</label>
-                  <div className="flex gap-1.5">{[1,2,3].map(d => <button key={d} onClick={() => setDifficulty(d)} className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${difficulty === d ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500'}`}>{diffLabels[d]}</button>)}</div>
+                    <div className="flex-1">
+                      <label className="text-xs font-medium text-gray-400 mb-1.5 block">문제 수</label>
+                      <select value={count} onChange={e => setCount(Number(e.target.value))} className="w-full py-1.5 px-2 rounded-lg border border-gray-200 bg-gray-100 text-sm text-gray-900">{[3,5,10].map(n => <option key={n} value={n}>{n}문제</option>)}</select>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <label className="text-xs font-medium text-gray-400 mb-1.5 block">문제 수</label>
-                  <select value={count} onChange={e => setCount(Number(e.target.value))} className="w-full py-1.5 px-2 rounded-lg border border-gray-200 bg-gray-100 text-sm text-gray-900">{[3,5,10].map(n => <option key={n} value={n}>{n}문제</option>)}</select>
-                </div>
-              </div>
-            </div>
-            <button onClick={generateFromUnit} disabled={!selectedUnit || loading} className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold disabled:bg-gray-200 disabled:text-gray-400 transition-colors">
-              {loading ? '문제 생성 중...' : '문제 풀기 시작'}
-            </button>
+                <button onClick={generateFromTopic} disabled={loading} className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold disabled:bg-gray-200 disabled:text-gray-400 transition-colors">
+                  {loading ? '문제 생성 중...' : '단원별 연습'}
+                </button>
+              </>
+            )}
           </>
         )}
       </div>
