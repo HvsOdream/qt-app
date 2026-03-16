@@ -1,13 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 
-const PARSE_PROMPT = `너는 시험 문제 분석 전문가야. 학생이 틀린 문제 사진을 업로드하면, 문제를 정확히 파싱해서 구조화된 JSON으로 반환해.
+const PARSE_PROMPT = `너는 시험 문제 분석 전문가야. 학생이 시험지/문제지를 촬영한 사진을 분석해서 모든 문제를 파싱한다.
 
-## 파싱 규칙
-1. 이미지에서 문제 텍스트, 선택지, 정답(표시되어 있다면)을 추출
-2. 과목/단원은 문맥으로 추론 (수학, 과학, 사회, 영어, 국어 등)
-3. 핵심 개념 키워드를 추출
-4. 여러 문제가 보이면 모두 파싱
+## 핵심 임무
+1. 사진 속 **모든 문제**를 번호 순서대로 파싱
+2. 각 문제에서 **학생이 고른 답**(marked_answer)과 **정답**(correct_answer)을 구분
+3. 채점 표시(O, X, 동그라미, 체크, 빨간 펜 등)를 분석해서 맞았는지 틀렸는지 판별
+
+## 채점 표시 판별 규칙
+- 문제 번호에 동그라미/체크 = 틀린 문제 표시일 가능성 높음 (시험지에서 틀린 문제에 표시하는 습관)
+- 선택지에 동그라미 = 학생이 고른 답 (marked_answer)
+- X표시 = 오답 표시
+- 빨간 펜/형광펜 표시도 채점 힌트로 활용
+- 판별이 애매하면 is_wrong: null로 표시
 
 ## 출력 형식
 반드시 JSON으로만 출력. 마크다운 코드블록 없이 순수 JSON만.
@@ -15,10 +21,12 @@ const PARSE_PROMPT = `너는 시험 문제 분석 전문가야. 학생이 틀린
 {
   "problems": [
     {
+      "question_number": "01",
       "question_text": "문제 본문 전체",
-      "choices": ["①선택지1", "②선택지2", "③선택지3", "④선택지4", "⑤선택지5"],
-      "marked_answer": "학생이 표시한 답 번호 (없으면 null)",
-      "correct_answer": "정답 번호 (표시되어 있으면, 없으면 null)",
+      "choices": ["①선택지1", "②선택지2", "③선택지3", "④선택지4"],
+      "marked_answer": "학생이 고른 답 번호 (없으면 null)",
+      "correct_answer": "정답 번호 (추론 가능하면, 없으면 null)",
+      "is_wrong": true,
       "subject": "과목명",
       "topic": "단원/주제",
       "keywords": ["핵심개념1", "핵심개념2"],
@@ -26,8 +34,13 @@ const PARSE_PROMPT = `너는 시험 문제 분석 전문가야. 학생이 틀린
     }
   ],
   "overall_subject": "주 과목",
-  "source_description": "시험지 종류 추정 (예: 중간고사, 모의고사, 워크북 등)"
+  "source_description": "시험지 종류 추정 (예: 기출유형, 모의고사, 자격증 등)"
 }
+
+## is_wrong 판별
+- true = 확실히 틀린 문제 (X표시, 오답 체크, 학생답 ≠ 정답)
+- false = 확실히 맞은 문제
+- null = 판별 불가 (채점 표시 없음)
 
 ## difficulty_guess 기준
 1 = 단순 기억/이해 수준
@@ -37,8 +50,9 @@ const PARSE_PROMPT = `너는 시험 문제 분석 전문가야. 학생이 틀린
 ## 주의사항
 - 글씨가 흐리거나 잘려도 최대한 추론해서 복원
 - choices가 없으면 (서술형) 빈 배열로
-- 수식은 텍스트로 최대한 표현 (예: "2x + 3 = 7")
-- 이미지에 문제가 아닌 내용(낙서, 메모)은 무시`;
+- 수식은 텍스트로 최대한 표현
+- 이미지에 문제가 아닌 내용(낙서, 메모)은 무시
+- 정답을 모르면 correct_answer: null, 학습 내용으로 추론 가능하면 채워`;
 
 export async function POST(request: NextRequest) {
   try {
@@ -65,6 +79,8 @@ export async function POST(request: NextRequest) {
 
     const anthropic = new Anthropic({ apiKey: process.env.CLAUDE_API_KEY });
 
+    // detail 파라미터: low=토큰 절약(고정 85토큰), high=고해상도
+    // 시험지 텍스트 인식에는 low로도 충분
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4096,

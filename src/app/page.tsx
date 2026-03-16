@@ -6,10 +6,12 @@ import type { User } from '@supabase/supabase-js';
 
 // ─── 타입 ───
 interface ParsedProblem {
+  question_number: string;
   question_text: string;
   choices: string[];
   marked_answer: string | null;
   correct_answer: string | null;
+  is_wrong: boolean | null;
   subject: string;
   topic: string;
   keywords: string[];
@@ -241,7 +243,11 @@ export default function Home() {
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setParseResult(data);
-      setSelectedParsedIdx(data.problems.map((_: ParsedProblem, i: number) => i));
+      // 틀린 문제만 자동 선택 (is_wrong=true). 판별 불가능하면 전체 선택
+      const wrongIdxs = data.problems
+        .map((p: ParsedProblem, i: number) => p.is_wrong === true ? i : -1)
+        .filter((i: number) => i >= 0);
+      setSelectedParsedIdx(wrongIdxs.length > 0 ? wrongIdxs : data.problems.map((_: ParsedProblem, i: number) => i));
       // 자동 카테고리 추가
       if (data.overall_subject) {
         setGame(prev => {
@@ -264,18 +270,26 @@ export default function Home() {
     if (!parseResult || selectedParsedIdx.length === 0) return;
     setLoading(true);
     try {
-      const allProblems: QuizProblem[] = [];
-      for (const idx of selectedParsedIdx) {
+      // 선택한 문제 수에 따라 각 문제당 생성할 개수를 균등 분배
+      const perProblem = Math.max(1, Math.ceil(count / selectedParsedIdx.length));
+
+      // 병렬 호출로 속도 향상
+      const promises = selectedParsedIdx.map(idx => {
         const original = parseResult.problems[idx];
-        const res = await fetch('/api/generate-similar', {
+        return fetch('/api/generate-similar', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ originalProblem: original, count: Math.max(1, Math.floor(count / selectedParsedIdx.length)), difficulty, user_id: user?.id }),
-        });
-        const data = await res.json();
-        if (data.problems) allProblems.push(...data.problems);
-      }
+          body: JSON.stringify({ originalProblem: original, count: perProblem, difficulty, user_id: user?.id }),
+        }).then(r => r.json());
+      });
+
+      const results = await Promise.all(promises);
+      const allProblems: QuizProblem[] = [];
+      results.forEach(data => { if (data.problems) allProblems.push(...data.problems); });
+
       if (allProblems.length > 0) {
-        setProblems(allProblems.slice(0, count));
+        // 요청한 수만큼만 잘라서 출제 (섞어서)
+        const shuffled = allProblems.sort(() => Math.random() - 0.5).slice(0, count);
+        setProblems(shuffled);
         setCurrentIndex(0); setSelectedAnswer(null); setShowExplanation(false);
         setScore({ correct: 0, total: 0 }); setQuizAnswers([]); setConsecutiveCorrect(0);
         setMode('quiz');
@@ -924,30 +938,82 @@ export default function Home() {
   // ═══════════════════════════════════════
   // 파싱 결과 (촬영 후 안내)
   // ═══════════════════════════════════════
-  if (mode === 'parsed' && parseResult) return (
+  if (mode === 'parsed' && parseResult) {
+    const wrongCount = parseResult.problems.filter(p => p.is_wrong === true).length;
+    const correctCount = parseResult.problems.filter(p => p.is_wrong === false).length;
+    const unknownCount = parseResult.problems.filter(p => p.is_wrong === null).length;
+
+    return (
     <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
       <div className="max-w-xl mx-auto px-4 py-6">
         <button onClick={goScan} className="text-violet-600 text-sm mb-3 flex items-center gap-1">← 다시 촬영</button>
 
-        <div className="text-center mb-5">
-          <div className="text-3xl mb-1">🎯</div>
+        {/* 요약 헤더 */}
+        <div className="text-center mb-4">
           <h2 className="text-lg font-extrabold text-gray-900">{parseResult.problems.length}문제 발견!</h2>
-          <p className="text-xs text-gray-500">{parseResult.overall_subject} · {parseResult.source_description}</p>
+          <p className="text-xs text-gray-500 mb-2">{parseResult.overall_subject} · {parseResult.source_description}</p>
+          <div className="flex justify-center gap-3">
+            {wrongCount > 0 && <span className="px-2.5 py-1 bg-red-100 text-red-600 text-xs font-bold rounded-lg">틀림 {wrongCount}</span>}
+            {correctCount > 0 && <span className="px-2.5 py-1 bg-green-100 text-green-600 text-xs font-bold rounded-lg">맞음 {correctCount}</span>}
+            {unknownCount > 0 && <span className="px-2.5 py-1 bg-gray-100 text-gray-500 text-xs font-bold rounded-lg">판별불가 {unknownCount}</span>}
+          </div>
         </div>
 
-        {/* 촬영 후 안내 */}
-        <div className="bg-green-50 border border-green-200 rounded-xl p-3 mb-4">
-          <p className="text-xs text-green-600 leading-relaxed">✨ <strong>선택한 문제를 기반으로</strong> AI가 같은 개념, 다른 숫자의 유사 문제를 만들어요. 진짜 이해했는지 확인!</p>
+        {/* 안내 */}
+        <div className="bg-violet-50 border border-violet-200 rounded-xl p-3 mb-4">
+          <p className="text-xs text-violet-600 leading-relaxed">
+            {wrongCount > 0
+              ? `틀린 ${wrongCount}문제가 자동 선택됐어요. 탭해서 추가/제거할 수 있어요.`
+              : '연습할 문제를 탭해서 선택해주세요.'}
+          </p>
         </div>
 
-        {/* 문제 목록 */}
+        {/* 전체 선택/해제 버튼 */}
+        <div className="flex gap-2 mb-3">
+          <button onClick={() => {
+            const wrongIdxs = parseResult.problems.map((p, i) => p.is_wrong === true ? i : -1).filter(i => i >= 0);
+            setSelectedParsedIdx(wrongIdxs.length > 0 ? wrongIdxs : parseResult.problems.map((_, i) => i));
+          }} className="px-3 py-1.5 text-xs bg-red-50 text-red-600 border border-red-200 rounded-lg font-medium">
+            틀린 것만
+          </button>
+          <button onClick={() => setSelectedParsedIdx(parseResult.problems.map((_, i) => i))} className="px-3 py-1.5 text-xs bg-violet-50 text-violet-600 border border-violet-200 rounded-lg font-medium">
+            전체 선택
+          </button>
+          <button onClick={() => setSelectedParsedIdx([])} className="px-3 py-1.5 text-xs bg-gray-50 text-gray-500 border border-gray-200 rounded-lg font-medium">
+            전체 해제
+          </button>
+        </div>
+
+        {/* 문제 목록 - 맞음/틀림 표시 */}
         <div className="space-y-2 mb-4">
-          {parseResult.problems.map((p, idx) => (
+          {parseResult.problems.map((p, idx) => {
+            const isSelected = selectedParsedIdx.includes(idx);
+            const statusIcon = p.is_wrong === true ? '❌' : p.is_wrong === false ? '✅' : '❓';
+            const borderColor = isSelected
+              ? (p.is_wrong === true ? 'border-red-400 bg-red-50/50' : 'border-violet-400')
+              : 'border-transparent';
+
+            return (
             <div key={idx} onClick={() => setSelectedParsedIdx(prev => prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx])}
-              className={`bg-white shadow-sm rounded-xl p-3 border-2 cursor-pointer transition-colors ${selectedParsedIdx.includes(idx) ? 'border-violet-400' : 'border-transparent'}`}>
+              className={`bg-white shadow-sm rounded-xl p-3 border-2 cursor-pointer transition-all ${borderColor}`}>
               <div className="flex items-start gap-2">
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${selectedParsedIdx.includes(idx) ? 'bg-violet-600 text-gray-900' : 'bg-gray-200 text-gray-500'}`}>{idx + 1}</div>
+                {/* 체크박스 + 상태 */}
+                <div className="flex flex-col items-center gap-1 flex-shrink-0">
+                  <div className={`w-5 h-5 rounded flex items-center justify-center text-xs ${isSelected ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-400 border border-gray-200'}`}>
+                    {isSelected ? '✓' : ''}
+                  </div>
+                  <span className="text-sm">{statusIcon}</span>
+                </div>
                 <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="text-xs font-bold text-gray-500">Q{p.question_number || idx + 1}</span>
+                    {p.is_wrong === true && p.marked_answer && (
+                      <span className="text-xs text-red-500">내 답: {p.marked_answer}번</span>
+                    )}
+                    {p.correct_answer && (
+                      <span className="text-xs text-green-600">정답: {p.correct_answer}번</span>
+                    )}
+                  </div>
                   <p className="text-xs text-gray-700 leading-relaxed line-clamp-2">{p.question_text}</p>
                   <div className="flex gap-1 mt-1.5 flex-wrap">
                     <span className="px-1.5 py-0.5 bg-violet-100 text-violet-600 text-xs rounded">{p.subject}</span>
@@ -956,7 +1022,8 @@ export default function Home() {
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* 옵션 + 예상 보상 */}
@@ -977,12 +1044,13 @@ export default function Home() {
 
         <button onClick={generateSimilar} disabled={selectedParsedIdx.length === 0 || loading}
           className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold disabled:bg-gray-200 disabled:text-gray-400 transition-colors">
-          {loading ? <span><span className="inline-block animate-spin mr-2">⏳</span>유사 문제 생성 중...</span> : `⚡ ${selectedParsedIdx.length}문제로 연습 시작`}
+          {loading ? <span><span className="inline-block animate-spin mr-2">⏳</span>유사 문제 생성 중...</span> : `⚡ 선택한 ${selectedParsedIdx.length}문제로 연습 시작`}
         </button>
       </div>
       <BottomNav />
     </div>
-  );
+    );
+  }
 
   // ═══════════════════════════════════════
   // 퀴즈 화면
