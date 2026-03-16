@@ -110,13 +110,15 @@ export default function Home() {
   const [streakBonus, setStreakBonus] = useState(0);
   const [consecutiveCorrect, setConsecutiveCorrect] = useState(0);
 
-  // 사진 업로드 상태
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  // 사진 업로드 상태 (여러 장 지원)
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [parsing, setParsing] = useState(false);
+  const [parseProgress, setParseProgress] = useState('');
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
   const [selectedParsedIdx, setSelectedParsedIdx] = useState<number[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
 
   // 단원 선택 상태
   const [units, setUnits] = useState<Unit[]>([]);
@@ -223,50 +225,118 @@ export default function Home() {
     });
   }, []);
 
-  // ─── 사진 업로드 핸들러 ───
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImageFile(file);
-    setImagePreview(URL.createObjectURL(file));
+  // ─── 이미지 압축 (1MB 이하로 리사이즈) ───
+  const compressImage = (file: File, maxSizeKB = 900): Promise<File> => {
+    return new Promise((resolve) => {
+      // 이미 작으면 그대로
+      if (file.size <= maxSizeKB * 1024) { resolve(file); return; }
+
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const canvas = document.createElement('canvas');
+        // 최대 1600px로 리사이즈 (시험지 텍스트 인식에 충분)
+        const maxDim = 1600;
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          const ratio = Math.min(maxDim / width, maxDim / height);
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(new File([blob], file.name, { type: 'image/jpeg' }));
+          } else {
+            resolve(file);
+          }
+        }, 'image/jpeg', 0.8);
+      };
+      img.src = url;
+    });
+  };
+
+  // ─── 사진 업로드 핸들러 (여러 장 지원) ───
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const newFiles: File[] = [];
+    const newPreviews: string[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const compressed = await compressImage(files[i]);
+      newFiles.push(compressed);
+      newPreviews.push(URL.createObjectURL(compressed));
+    }
+
+    setImageFiles(prev => [...prev, ...newFiles]);
+    setImagePreviews(prev => [...prev, ...newPreviews]);
     setParseResult(null);
     setSelectedParsedIdx([]);
+    // input 초기화 (같은 파일 재선택 허용)
+    e.target.value = '';
+  };
+
+  const removeImage = (idx: number) => {
+    URL.revokeObjectURL(imagePreviews[idx]);
+    setImageFiles(prev => prev.filter((_, i) => i !== idx));
+    setImagePreviews(prev => prev.filter((_, i) => i !== idx));
   };
 
   const handleParseImage = async () => {
-    if (!imageFile) return;
+    if (imageFiles.length === 0) return;
     setParsing(true);
     try {
-      const formData = new FormData();
-      formData.append('image', imageFile);
-      const res = await fetch('/api/parse-image', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
+      const allProblems: ParsedProblem[] = [];
+      let overallSubject = '';
+      let sourceDesc = '';
+
+      // 여러 장 순차 파싱 (각 장마다 API 호출)
+      for (let i = 0; i < imageFiles.length; i++) {
+        setParseProgress(`${i + 1}/${imageFiles.length}장 분석 중...`);
+        const formData = new FormData();
+        formData.append('image', imageFiles[i]);
+        const res = await fetch('/api/parse-image', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        if (data.problems) allProblems.push(...data.problems);
+        if (!overallSubject && data.overall_subject) overallSubject = data.overall_subject;
+        if (!sourceDesc && data.source_description) sourceDesc = data.source_description;
+      }
+
       // is_wrong 보정: AI 시각 판별보다 marked_answer vs correct_answer 비교가 정확
-      const corrected = {
-        ...data,
-        problems: data.problems.map((p: ParsedProblem) => {
-          if (p.marked_answer && p.correct_answer) {
-            // 둘 다 있으면 코드에서 직접 비교
-            const isWrong = String(p.marked_answer).trim() !== String(p.correct_answer).trim();
-            return { ...p, is_wrong: isWrong };
-          }
-          // 둘 중 하나라도 없으면 AI 판별 유지
-          return p;
-        }),
+      const correctedProblems = allProblems.map((p: ParsedProblem) => {
+        if (p.marked_answer && p.correct_answer) {
+          const isWrong = String(p.marked_answer).trim() !== String(p.correct_answer).trim();
+          return { ...p, is_wrong: isWrong };
+        }
+        return p;
+      });
+
+      const corrected: ParseResult = {
+        problems: correctedProblems,
+        overall_subject: overallSubject,
+        source_description: sourceDesc,
       };
       setParseResult(corrected);
-      // 틀린 문제만 자동 선택 (is_wrong=true). 판별 불가능하면 전체 선택
-      const wrongIdxs = corrected.problems
+
+      // 틀린 문제만 자동 선택
+      const wrongIdxs = correctedProblems
         .map((p: ParsedProblem, i: number) => p.is_wrong === true ? i : -1)
         .filter((i: number) => i >= 0);
-      setSelectedParsedIdx(wrongIdxs.length > 0 ? wrongIdxs : corrected.problems.map((_: ParsedProblem, i: number) => i));
+      setSelectedParsedIdx(wrongIdxs.length > 0 ? wrongIdxs : correctedProblems.map((_: ParsedProblem, i: number) => i));
+
       // 자동 카테고리 추가
-      if (data.overall_subject) {
+      if (overallSubject) {
         setGame(prev => {
           const g = { ...prev };
-          if (!g.categories.includes(data.overall_subject)) {
-            g.categories = [...g.categories, data.overall_subject];
+          if (!g.categories.includes(overallSubject)) {
+            g.categories = [...g.categories, overallSubject];
           }
           saveGame(g);
           return g;
@@ -275,7 +345,7 @@ export default function Home() {
       setMode('parsed');
     } catch {
       alert('이미지 분석에 실패했습니다. 다시 시도해주세요.');
-    } finally { setParsing(false); }
+    } finally { setParsing(false); setParseProgress(''); }
   };
 
   // ─── 유사 문제 생성 ───
@@ -419,7 +489,8 @@ export default function Home() {
   // ─── 초기화 ───
   const resetAll = () => {
     setMode('home'); setActiveNav('home'); setProblems([]); setParseResult(null);
-    setImageFile(null); setImagePreview(null); setSelectedParsedIdx([]);
+    imagePreviews.forEach(u => URL.revokeObjectURL(u));
+    setImageFiles([]); setImagePreviews([]); setSelectedParsedIdx([]);
     setSelectedUnit(''); setSelectedUnitName(''); setQuizAnswers([]);
   };
 
@@ -763,34 +834,64 @@ export default function Home() {
         {tab === 'photo' && (
           <>
             <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-5 mb-4">
-              <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={handleImageSelect} className="hidden" />
-              {imagePreview ? (
-                <div className="relative mb-3">
-                  <img src={imagePreview} alt="업로드된 문제" className="w-full rounded-xl border border-gray-200 max-h-72 object-contain bg-gray-100" />
-                  <button onClick={() => { setImageFile(null); setImagePreview(null); setParseResult(null); }} className="absolute top-2 right-2 w-7 h-7 bg-black/40 text-white rounded-full flex items-center justify-center text-xs">✕</button>
+              {/* 카메라(촬영) / 갤러리(앨범) 분리 input */}
+              <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleImageSelect} className="hidden" />
+              <input ref={galleryInputRef} type="file" accept="image/*" multiple onChange={handleImageSelect} className="hidden" />
+
+              {/* 이미지 미리보기 (여러 장) */}
+              {imagePreviews.length > 0 ? (
+                <div className="mb-3">
+                  <div className="flex gap-2 overflow-x-auto pb-2">
+                    {imagePreviews.map((preview, idx) => (
+                      <div key={idx} className="relative flex-shrink-0">
+                        <img src={preview} alt={`시험지 ${idx + 1}`} className="w-28 h-36 rounded-xl border border-gray-200 object-cover bg-gray-100" />
+                        <button onClick={() => removeImage(idx)} className="absolute -top-1.5 -right-1.5 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-xs font-bold shadow">✕</button>
+                        <div className="absolute bottom-1 left-1 bg-black/50 text-white text-xs px-1.5 py-0.5 rounded">{idx + 1}장</div>
+                      </div>
+                    ))}
+                    {/* 추가 촬영 버튼 */}
+                    {imagePreviews.length < 5 && (
+                      <button onClick={() => cameraInputRef.current?.click()} className="w-28 h-36 flex-shrink-0 border-2 border-dashed border-violet-300 rounded-xl flex flex-col items-center justify-center gap-1 text-violet-500">
+                        <span className="text-2xl">+</span>
+                        <span className="text-xs">추가</span>
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">{imagePreviews.length}장 선택됨 (최대 5장)</p>
                 </div>
               ) : (
-                <button onClick={() => fileInputRef.current?.click()} className="w-full h-44 border-2 border-dashed border-violet-300 rounded-xl flex flex-col items-center justify-center gap-2 text-violet-600/70 hover:border-violet-400 transition-colors mb-3">
-                  <span className="text-4xl">📸</span>
-                  <span className="text-sm font-medium">사진 찍기 / 이미지 선택</span>
-                </button>
+                <div className="mb-3">
+                  {/* 카메라 / 갤러리 분리 버튼 */}
+                  <div className="flex gap-2">
+                    <button onClick={() => cameraInputRef.current?.click()} className="flex-1 h-36 border-2 border-dashed border-violet-300 rounded-xl flex flex-col items-center justify-center gap-2 text-violet-600/70 hover:border-violet-400 transition-colors">
+                      <span className="text-3xl">📸</span>
+                      <span className="text-xs font-medium">카메라로 촬영</span>
+                    </button>
+                    <button onClick={() => galleryInputRef.current?.click()} className="flex-1 h-36 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center gap-2 text-gray-500 hover:border-violet-300 transition-colors">
+                      <span className="text-3xl">🖼️</span>
+                      <span className="text-xs font-medium">앨범에서 선택</span>
+                      <span className="text-xs text-gray-400">여러 장 가능</span>
+                    </button>
+                  </div>
+                </div>
               )}
 
               {/* 촬영 가이드 */}
-              <div className="bg-white shadow-sm rounded-xl p-3 text-xs text-gray-400 space-y-1 mb-3">
+              <div className="bg-gray-50 rounded-xl p-3 text-xs text-gray-400 space-y-1 mb-3">
                 <div className="text-xs font-bold text-gray-900 mb-1.5">💡 잘 찍는 법</div>
                 <div>✅ 문제 전체가 보이게 찍어주세요</div>
-                <div>✅ 밝은 곳에서, 그림자 없이</div>
-                <div>✅ 살짝 기울어져도 AI가 읽어요</div>
-                <div>✅ 한 장에 여러 문제 OK — 과목 상관없이!</div>
+                <div>✅ 시험지 여러 페이지? 한 장씩 추가하면 돼요</div>
+                <div>✅ 사진은 자동 압축 — 용량 걱정 없음</div>
               </div>
 
-              {imageFile && !parsing && (
-                <button onClick={handleParseImage} className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-medium">문제 분석하기</button>
+              {imageFiles.length > 0 && !parsing && (
+                <button onClick={handleParseImage} className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-medium">
+                  {imageFiles.length === 1 ? '문제 분석하기' : `${imageFiles.length}장 한번에 분석하기`}
+                </button>
               )}
               {parsing && (
                 <div className="w-full py-3 rounded-xl bg-violet-100 text-violet-500 font-medium text-center text-sm">
-                  <span className="inline-block animate-spin mr-2">⏳</span>AI가 문제를 분석하고 있어요...
+                  <span className="inline-block animate-spin mr-2">⏳</span>{parseProgress || 'AI가 문제를 분석하고 있어요...'}
                 </div>
               )}
             </div>
