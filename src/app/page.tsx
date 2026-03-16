@@ -664,7 +664,6 @@ export default function Home() {
           </>
         )}
 
-        {/* 단원 탭 */}
         {/* 약점 연습 탭 */}
         {tab === 'topics' && (
           <>
@@ -676,23 +675,34 @@ export default function Home() {
                   <div className="text-3xl mb-2">📷</div>
                   <p className="text-sm text-gray-500">아직 데이터가 없어요</p>
                   <p className="text-xs text-gray-400 mt-1">사진으로 문제를 풀면 약점이 자동으로 쌓여요!</p>
+                  <button onClick={() => setTab('photo')} className="mt-4 px-4 py-2 rounded-xl bg-violet-100 text-violet-600 text-xs font-medium">사진으로 시작하기</button>
                 </div>
               ) : (
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {topicGroups.map(group => (
-                    <details key={group.subject} className="group" open>
-                      <summary className="cursor-pointer py-1.5 px-3 rounded-lg hover:bg-gray-100 font-medium text-gray-700 text-xs flex justify-between items-center">
+                <div className="space-y-2 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 340px)' }}>
+                  {[...topicGroups].sort((a, b) => b.totalWrong - a.totalWrong).map((group, gi) => (
+                    <details key={group.subject} className="group" open={gi === 0}>
+                      <summary className="cursor-pointer py-2 px-3 rounded-lg hover:bg-gray-50 font-medium text-gray-700 text-xs flex justify-between items-center">
                         <span>{group.subject}</span>
                         <span className="text-violet-500 bg-violet-50 px-2 py-0.5 rounded-full text-[10px]">{group.totalWrong}회 오답</span>
                       </summary>
                       <div className="ml-2 mt-1 space-y-0.5">
-                        {group.topics.map(t => (
-                          <button key={t.topic} onClick={() => setSelectedTopic({ subject: group.subject, topic: t.topic, keywords: t.keywords })}
-                            className={`w-full text-left py-1.5 px-3 rounded-lg text-xs transition-colors flex justify-between items-center ${selectedTopic?.topic === t.topic && selectedTopic?.subject === group.subject ? 'bg-violet-100 text-violet-600 font-medium' : 'text-gray-500 hover:bg-gray-50'}`}>
-                            <span>{t.topic}</span>
-                            <span className="text-[10px] text-gray-400">{t.wrongCount}회</span>
-                          </button>
-                        ))}
+                        {[...group.topics].sort((a, b) => b.wrongCount - a.wrongCount).map(t => {
+                          const ready = t.wrongCount >= 3;
+                          return (
+                            <button key={t.topic}
+                              onClick={() => ready && setSelectedTopic({ subject: group.subject, topic: t.topic, keywords: t.keywords })}
+                              className={`w-full text-left py-1.5 px-3 rounded-lg text-xs transition-colors flex justify-between items-center ${
+                                !ready ? 'text-gray-300 cursor-default' :
+                                selectedTopic?.topic === t.topic && selectedTopic?.subject === group.subject ? 'bg-violet-100 text-violet-600 font-medium' : 'text-gray-500 hover:bg-gray-50'
+                              }`}>
+                              <span className="flex items-center gap-1">
+                                {t.topic}
+                                {!ready && <span className="text-[9px] text-gray-300 ml-1">({3 - t.wrongCount}개 더 필요)</span>}
+                              </span>
+                              <span className={`text-[10px] ${ready ? 'text-gray-400' : 'text-gray-300'}`}>{t.wrongCount}회</span>
+                            </button>
+                          );
+                        })}
                       </div>
                     </details>
                   ))}
@@ -722,6 +732,7 @@ export default function Home() {
           </>
         )}
 
+        {/* 단원 탭 */}
         {tab === 'unit' && (
           <>
             <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-5 mb-4">
@@ -735,21 +746,34 @@ export default function Home() {
                   <button onClick={() => setTab('photo')} className="mt-4 px-4 py-2 rounded-xl bg-violet-100 text-violet-600 text-xs font-medium">사진으로 시작하기</button>
                 </div>
               ) : (
-                <div className="space-y-1.5 max-h-64 overflow-y-auto">
-                  {topicGroups.map(group => (
-                    <details key={group.subject} className="group">
-                      <summary className="cursor-pointer py-1.5 px-3 rounded-lg hover:bg-gray-100 font-medium text-gray-700 text-xs flex justify-between items-center">
+                <div className="space-y-1.5 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 340px)' }}>
+                  {[...topicGroups].sort((a, b) => b.totalWrong - a.totalWrong).map((group, gi) => (
+                    <details key={group.subject} className="group" open={gi === 0}>
+                      <summary className="cursor-pointer py-2 px-3 rounded-lg hover:bg-gray-50 font-medium text-gray-700 text-xs flex justify-between items-center">
                         <span>{group.subject}</span>
-                        <span className="text-violet-500 bg-violet-50 px-2 py-0.5 rounded-full text-[10px]">{group.topics.length}개 주제</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-400 text-[10px]">{group.totalWrong}회 오답</span>
+                          <span className="text-violet-500 bg-violet-50 px-2 py-0.5 rounded-full text-[10px]">{group.topics.length}개 주제</span>
+                        </div>
                       </summary>
                       <div className="ml-3 mt-1 space-y-0.5">
-                        {group.topics.map(t => (
-                          <button key={t.topic} onClick={() => setSelectedTopic({ subject: group.subject, topic: t.topic, keywords: t.keywords })}
-                            className={`w-full text-left py-1 px-3 rounded text-xs transition-colors flex justify-between items-center ${selectedTopic?.topic === t.topic && selectedTopic?.subject === group.subject ? 'bg-violet-100 text-violet-500 font-medium' : 'text-gray-500 hover:bg-gray-100'}`}>
-                            <span>{t.topic}</span>
-                            <span className="text-[10px] text-gray-400">{t.wrongCount}회</span>
-                          </button>
-                        ))}
+                        {[...group.topics].sort((a, b) => b.wrongCount - a.wrongCount).map(t => {
+                          const ready = t.wrongCount >= 3;
+                          return (
+                            <button key={t.topic}
+                              onClick={() => ready && setSelectedTopic({ subject: group.subject, topic: t.topic, keywords: t.keywords })}
+                              className={`w-full text-left py-1.5 px-3 rounded-lg text-xs transition-colors flex justify-between items-center ${
+                                !ready ? 'text-gray-300 cursor-default' :
+                                selectedTopic?.topic === t.topic && selectedTopic?.subject === group.subject ? 'bg-violet-100 text-violet-500 font-medium' : 'text-gray-500 hover:bg-gray-100'
+                              }`}>
+                              <span className="flex items-center gap-1">
+                                {t.topic}
+                                {!ready && <span className="text-[9px] text-gray-300 ml-1">({3 - t.wrongCount}개 더 필요)</span>}
+                              </span>
+                              <span className={`text-[10px] ${ready ? 'text-gray-400' : 'text-gray-300'}`}>{t.wrongCount}회</span>
+                            </button>
+                          );
+                        })}
                       </div>
                     </details>
                   ))}
