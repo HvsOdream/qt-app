@@ -347,7 +347,7 @@ export default function Home() {
           ].map(n => (
             <button key={n.id} onClick={n.action} className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${activeNav === n.id ? 'text-violet-600 bg-violet-50' : 'text-gray-400 hover:text-gray-600'} ${n.id === 'analysis' ? 'opacity-40' : ''}`}>
               <span className="text-lg">{n.icon}</span>
-              <span className={`text-[10px] ${activeNav === n.id ? 'font-semibold' : ''}`}>{n.label}{n.id === 'analysis' ? ' 🔒' : ''}</span>
+              <span className={`text-xs ${activeNav === n.id ? 'font-semibold' : ''}`}>{n.label}{n.id === 'analysis' ? ' 🔒' : ''}</span>
             </button>
           ))}
         </div>
@@ -371,7 +371,7 @@ export default function Home() {
   // ─── XP 바 ───
   const XpBar = ({ compact = false }: { compact?: boolean }) => (
     <div className={compact ? 'flex items-center gap-2' : ''}>
-      <div className={`flex justify-between text-[10px] mb-1 ${compact ? 'hidden' : ''}`}>
+      <div className={`flex justify-between text-xs mb-1 ${compact ? 'hidden' : ''}`}>
         <span className="text-gray-500">Lv.{game.level} {levelTitle(game.level)}</span>
         <span className="text-violet-600">{game.xp}/{xpForLevel(game.level)}</span>
       </div>
@@ -455,7 +455,7 @@ export default function Home() {
           ].map(({ icon, label, bg, border, text }) => (
             <div key={label} className={`${bg} border ${border} rounded-xl px-3 py-2 text-center`}>
               <div className="text-xl">{icon}</div>
-              <div className={`text-[9px] ${text}`}>{label}</div>
+              <div className={`text-xs ${text}`}>{label}</div>
             </div>
           ))}
         </div>
@@ -482,7 +482,7 @@ export default function Home() {
         <p className="text-xs text-gray-500 mt-1">어떤 걸 선택해도 좋아요</p>
       </div>
       <div onClick={() => { completeOnboard(); goScan(); }} className="bg-white shadow-sm border-2 border-violet-300 rounded-2xl p-5 mb-3 cursor-pointer active:scale-[0.98] transition-transform relative">
-        <div className="absolute top-3 right-3 bg-violet-600 text-white text-[10px] font-bold px-2.5 py-0.5 rounded">추천</div>
+        <div className="absolute top-3 right-3 bg-violet-600 text-white text-xs font-bold px-2.5 py-0.5 rounded">추천</div>
         <div className="text-3xl mb-2">📸</div>
         <h3 className="text-base font-bold text-gray-900 mb-1">시험지 바로 찍기</h3>
         <p className="text-xs text-gray-500 leading-relaxed">가지고 있는 시험지나 문제집을 바로 찍어보세요.<br/>AI가 과목과 유형을 자동으로 파악해요.</p>
@@ -493,7 +493,7 @@ export default function Home() {
         <h3 className="text-base font-bold text-gray-900 mb-1">홈에서 둘러보기</h3>
         <p className="text-xs text-gray-500 leading-relaxed">먼저 둘러보고, 준비되면 스캔해요.</p>
       </div>
-      <p className="text-[10px] text-gray-600 text-center mt-6">📷 촬영한 사진은 문제 분석에만 사용되며, 서버에 저장되지 않습니다.</p>
+      <p className="text-xs text-gray-600 text-center mt-6">📷 촬영한 사진은 문제 분석에만 사용되며, 서버에 저장되지 않습니다.</p>
     </div>
   );
 
@@ -512,22 +512,22 @@ export default function Home() {
           </div>
           <div className="text-center">
             <div className="text-lg">🔥</div>
-            <div className="text-[10px] text-yellow-600 font-bold">{game.streak}일</div>
+            <div className="text-xs text-yellow-600 font-bold">{game.streak}일</div>
           </div>
         </div>
 
         {/* QP / 통계 */}
         <div className="flex gap-2 mb-4">
           <div className="flex-1 bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2 text-center">
-            <div className="text-[9px] text-yellow-600">QP</div>
+            <div className="text-xs text-yellow-600">QP</div>
             <div className="text-base font-extrabold text-yellow-600">{game.qp}</div>
           </div>
           <div className="flex-1 bg-green-50 border border-green-200 rounded-xl px-3 py-2 text-center">
-            <div className="text-[9px] text-green-600">푼 문제</div>
+            <div className="text-xs text-green-600">푼 문제</div>
             <div className="text-base font-extrabold text-green-600">{game.totalSolved}</div>
           </div>
           <div className="flex-1 bg-violet-50 border border-violet-200 rounded-xl px-3 py-2 text-center">
-            <div className="text-[9px] text-violet-600">정답률</div>
+            <div className="text-xs text-violet-600">정답률</div>
             <div className="text-base font-extrabold text-violet-600">{game.totalSolved > 0 ? Math.round((game.totalCorrect / game.totalSolved) * 100) : 0}%</div>
           </div>
         </div>
@@ -536,9 +536,9 @@ export default function Home() {
         <div className="bg-white shadow-sm border border-violet-200 rounded-2xl p-4 mb-4">
           <div className="flex justify-between items-center mb-2">
             <span className="text-xs font-bold text-violet-600">📋 오늘의 미션</span>
-            <span className="text-[10px] text-gray-500">{Math.min(game.totalSolved >= 3 ? 1 : 0, 1) + (game.totalSolved >= 1 ? 1 : 0)}/3</span>
+            <span className="text-xs text-gray-500">{Math.min(game.totalSolved >= 3 ? 1 : 0, 1) + (game.totalSolved >= 1 ? 1 : 0)}/3</span>
           </div>
-          <div className="space-y-1.5 text-[11px]">
+          <div className="space-y-1.5 text-xs">
             <div className="flex justify-between"><span className={game.totalSolved >= 3 ? 'text-gray-500 line-through' : 'text-gray-700'}>{game.totalSolved >= 3 ? '✅' : '⬜'} 문제 3개 풀기</span><span className="text-violet-600">+30 QP</span></div>
             <div className="flex justify-between"><span className="text-gray-700">⬜ 새 시험지 스캔</span><span className="text-violet-600">+50 QP</span></div>
             <div className="flex justify-between"><span className="text-gray-700">⬜ 오답 특훈 1회</span><span className="text-violet-600">+40 QP</span></div>
@@ -553,7 +553,7 @@ export default function Home() {
           <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-4 mb-4">
             <div className="text-xs font-bold text-gray-900 mb-2">🏷 내 카테고리</div>
             <div className="flex gap-1.5 flex-wrap">
-              {game.categories.map(c => <span key={c} className="px-2.5 py-1 bg-violet-100 text-violet-600 text-[10px] rounded-lg font-medium">{c}</span>)}
+              {game.categories.map(c => <span key={c} className="px-2.5 py-1 bg-violet-100 text-violet-600 text-xs rounded-lg font-medium">{c}</span>)}
             </div>
           </div>
         )}
@@ -561,7 +561,7 @@ export default function Home() {
         {/* 해금 프리뷰 */}
         <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-4 opacity-50">
           <div className="text-xs font-bold text-gray-900 mb-2">🔒 해금 대기 중</div>
-          <div className="space-y-1 text-[11px] text-gray-500">
+          <div className="space-y-1 text-xs text-gray-500">
             <div>📊 약점 분석 — {Math.min(game.totalSolved, 10)}/10 문제 풀면 해금</div>
             <div>👥 문제 추천 — {Math.min(game.totalSolved, 30)}/30 문제 달성 시</div>
             <div>⚔️ 랭킹 챌린지 — Lv.{game.level}/5 달성 시</div>
@@ -608,7 +608,7 @@ export default function Home() {
               )}
 
               {/* 촬영 가이드 */}
-              <div className="bg-white shadow-sm rounded-xl p-3 text-[11px] text-gray-400 space-y-1 mb-3">
+              <div className="bg-white shadow-sm rounded-xl p-3 text-xs text-gray-400 space-y-1 mb-3">
                 <div className="text-xs font-bold text-gray-900 mb-1.5">💡 잘 찍는 법</div>
                 <div>✅ 문제 전체가 보이게 찍어주세요</div>
                 <div>✅ 밝은 곳에서, 그림자 없이</div>
@@ -632,7 +632,7 @@ export default function Home() {
               </div>
             )}
 
-            <p className="text-[9px] text-gray-600 text-center mt-3">📷 촬영한 사진은 분석 후 즉시 삭제됩니다</p>
+            <p className="text-xs text-gray-600 text-center mt-3">📷 촬영한 사진은 분석 후 즉시 삭제됩니다</p>
           </>
         )}
 
@@ -641,7 +641,7 @@ export default function Home() {
           <>
             <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-5 mb-4">
               <h2 className="text-sm font-semibold text-gray-900 mb-1">단원 선택</h2>
-              <p className="text-[10px] text-gray-500 mb-3">중2 과학 · 천재교과서</p>
+              <p className="text-xs text-gray-500 mb-3">중2 과학 · 천재교과서</p>
               <div className="space-y-1.5 max-h-64 overflow-y-auto">
                 {units.map(l1 => (
                   <details key={l1.id} className="group">
@@ -649,11 +649,11 @@ export default function Home() {
                     <div className="ml-3 mt-1 space-y-0.5">
                       {l1.children?.map(l2 => (
                         <details key={l2.id}>
-                          <summary className="cursor-pointer py-1 px-3 rounded text-[11px] text-gray-400 hover:bg-gray-100">{l2.code}. {l2.title}</summary>
+                          <summary className="cursor-pointer py-1 px-3 rounded text-xs text-gray-400 hover:bg-gray-100">{l2.code}. {l2.title}</summary>
                           <div className="ml-3 mt-0.5 space-y-0.5">
                             {l2.children?.map(l3 => (
                               <button key={l3.id} onClick={() => { setSelectedUnit(l3.id); setSelectedUnitName(`${l3.code} ${l3.title}`); }}
-                                className={`w-full text-left py-1 px-3 rounded text-[11px] transition-colors ${selectedUnit === l3.id ? 'bg-violet-100 text-violet-500 font-medium' : 'text-gray-500 hover:bg-gray-100'}`}>
+                                className={`w-full text-left py-1 px-3 rounded text-xs transition-colors ${selectedUnit === l3.id ? 'bg-violet-100 text-violet-500 font-medium' : 'text-gray-500 hover:bg-gray-100'}`}>
                                 {l3.code}. {l3.title}
                               </button>
                             ))}
@@ -664,16 +664,16 @@ export default function Home() {
                   </details>
                 ))}
               </div>
-              {selectedUnit && <div className="mt-2 text-[11px] text-violet-600 bg-violet-100 px-3 py-1.5 rounded-lg">선택: {selectedUnitName}</div>}
+              {selectedUnit && <div className="mt-2 text-xs text-violet-600 bg-violet-100 px-3 py-1.5 rounded-lg">선택: {selectedUnitName}</div>}
             </div>
             <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-5 mb-4">
               <div className="flex gap-4">
                 <div className="flex-1">
-                  <label className="text-[10px] font-medium text-gray-400 mb-1.5 block">난이도</label>
+                  <label className="text-xs font-medium text-gray-400 mb-1.5 block">난이도</label>
                   <div className="flex gap-1.5">{[1,2,3].map(d => <button key={d} onClick={() => setDifficulty(d)} className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${difficulty === d ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500'}`}>{diffLabels[d]}</button>)}</div>
                 </div>
                 <div className="flex-1">
-                  <label className="text-[10px] font-medium text-gray-400 mb-1.5 block">문제 수</label>
+                  <label className="text-xs font-medium text-gray-400 mb-1.5 block">문제 수</label>
                   <select value={count} onChange={e => setCount(Number(e.target.value))} className="w-full py-1.5 px-2 rounded-lg border border-gray-200 bg-gray-100 text-sm text-gray-900">{[3,5,10].map(n => <option key={n} value={n}>{n}문제</option>)}</select>
                 </div>
               </div>
@@ -704,7 +704,7 @@ export default function Home() {
 
         {/* 촬영 후 안내 */}
         <div className="bg-green-50 border border-green-200 rounded-xl p-3 mb-4">
-          <p className="text-[11px] text-green-600 leading-relaxed">✨ <strong>선택한 문제를 기반으로</strong> AI가 같은 개념, 다른 숫자의 유사 문제를 만들어요. 진짜 이해했는지 확인!</p>
+          <p className="text-xs text-green-600 leading-relaxed">✨ <strong>선택한 문제를 기반으로</strong> AI가 같은 개념, 다른 숫자의 유사 문제를 만들어요. 진짜 이해했는지 확인!</p>
         </div>
 
         {/* 문제 목록 */}
@@ -713,12 +713,12 @@ export default function Home() {
             <div key={idx} onClick={() => setSelectedParsedIdx(prev => prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx])}
               className={`bg-white shadow-sm rounded-xl p-3 border-2 cursor-pointer transition-colors ${selectedParsedIdx.includes(idx) ? 'border-violet-400' : 'border-transparent'}`}>
               <div className="flex items-start gap-2">
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${selectedParsedIdx.includes(idx) ? 'bg-violet-600 text-gray-900' : 'bg-gray-200 text-gray-500'}`}>{idx + 1}</div>
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${selectedParsedIdx.includes(idx) ? 'bg-violet-600 text-gray-900' : 'bg-gray-200 text-gray-500'}`}>{idx + 1}</div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-gray-700 leading-relaxed line-clamp-2">{p.question_text}</p>
                   <div className="flex gap-1 mt-1.5 flex-wrap">
-                    <span className="px-1.5 py-0.5 bg-violet-100 text-violet-600 text-[9px] rounded">{p.subject}</span>
-                    <span className="px-1.5 py-0.5 bg-gray-100 text-gray-400 text-[9px] rounded">{p.topic}</span>
+                    <span className="px-1.5 py-0.5 bg-violet-100 text-violet-600 text-xs rounded">{p.subject}</span>
+                    <span className="px-1.5 py-0.5 bg-gray-100 text-gray-400 text-xs rounded">{p.topic}</span>
                   </div>
                 </div>
               </div>
@@ -729,15 +729,15 @@ export default function Home() {
         {/* 옵션 + 예상 보상 */}
         <div className="flex gap-2 mb-4">
           <div className="flex-1 bg-white shadow-sm rounded-xl p-2.5 text-center">
-            <div className="text-[9px] text-gray-500">문제 수</div>
+            <div className="text-xs text-gray-500">문제 수</div>
             <select value={count} onChange={e => setCount(Number(e.target.value))} className="text-sm font-bold text-gray-900 bg-transparent text-center">{[3,5,10].map(n => <option key={n} value={n}>{n}</option>)}</select>
           </div>
           <div className="flex-1 bg-white shadow-sm rounded-xl p-2.5 text-center">
-            <div className="text-[9px] text-gray-500">난이도</div>
-            <div className="flex gap-1 mt-1 justify-center">{[1,2,3].map(d => <button key={d} onClick={() => setDifficulty(d)} className={`px-2 py-0.5 rounded text-[10px] font-medium ${difficulty === d ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500'}`}>{d===1?'쉽게':d===2?'비슷':'어렵게'}</button>)}</div>
+            <div className="text-xs text-gray-500">난이도</div>
+            <div className="flex gap-1 mt-1 justify-center">{[1,2,3].map(d => <button key={d} onClick={() => setDifficulty(d)} className={`px-2 py-0.5 rounded text-xs font-medium ${difficulty === d ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500'}`}>{d===1?'쉽게':d===2?'비슷':'어렵게'}</button>)}</div>
           </div>
           <div className="flex-1 bg-yellow-50 rounded-xl p-2.5 text-center">
-            <div className="text-[9px] text-yellow-600">예상 보상</div>
+            <div className="text-xs text-yellow-600">예상 보상</div>
             <div className="text-sm font-bold text-yellow-600">+{count * 15} QP</div>
           </div>
         </div>
@@ -765,15 +765,15 @@ export default function Home() {
             <div className="flex-1 mx-3 h-1.5 bg-gray-100 rounded-full overflow-hidden">
               <div className="h-full bg-gradient-to-r from-violet-600 to-violet-400 rounded-full transition-all" style={{ width: `${((currentIndex + 1) / problems.length) * 100}%` }} />
             </div>
-            {consecutiveCorrect >= 2 && <span className="text-[11px] text-yellow-600 font-bold">🔥 {consecutiveCorrect}연속{consecutiveCorrect >= 5 ? '! x2.0' : consecutiveCorrect >= 3 ? ' x1.5' : ''}</span>}
+            {consecutiveCorrect >= 2 && <span className="text-xs text-yellow-600 font-bold">🔥 {consecutiveCorrect}연속{consecutiveCorrect >= 5 ? '! x2.0' : consecutiveCorrect >= 3 ? ' x1.5' : ''}</span>}
             <span className="text-xs font-medium text-violet-600 ml-2">{score.correct}/{score.total}</span>
           </div>
 
           {/* 태그 */}
           <div className="flex gap-1.5 mb-3 flex-wrap">
-            {problem.subject && <span className="px-2 py-0.5 bg-violet-100 text-violet-600 text-[10px] rounded font-medium">{problem.subject}</span>}
-            {problem.topic && <span className="px-2 py-0.5 bg-gray-100 text-gray-400 text-[10px] rounded">{problem.topic}</span>}
-            <span className="px-2 py-0.5 bg-yellow-100 text-yellow-600 text-[10px] rounded">{bloomLabels[problem.bloom_level] || '기타'}</span>
+            {problem.subject && <span className="px-2 py-0.5 bg-violet-100 text-violet-600 text-xs rounded font-medium">{problem.subject}</span>}
+            {problem.topic && <span className="px-2 py-0.5 bg-gray-100 text-gray-400 text-xs rounded">{problem.topic}</span>}
+            <span className="px-2 py-0.5 bg-yellow-100 text-yellow-600 text-xs rounded">{bloomLabels[problem.bloom_level] || '기타'}</span>
           </div>
 
           {/* 문제 카드 */}
@@ -845,15 +845,15 @@ export default function Home() {
           <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4 mb-4">
             <div className="text-xs font-bold text-yellow-600 mb-2">🎁 획득한 보상</div>
             <div className="flex gap-2">
-              <div className="flex-1 text-center bg-gray-100 rounded-xl py-2.5"><div className="text-lg">⭐</div><div className="text-[10px] text-yellow-600">+{earnedXp} XP</div></div>
-              <div className="flex-1 text-center bg-gray-100 rounded-xl py-2.5"><div className="text-lg">💰</div><div className="text-[10px] text-yellow-600">+{earnedQp} QP</div></div>
-              <div className="flex-1 text-center bg-gray-100 rounded-xl py-2.5"><div className="text-lg">🔥</div><div className="text-[10px] text-yellow-600">{game.streak}일 연속</div></div>
+              <div className="flex-1 text-center bg-gray-100 rounded-xl py-2.5"><div className="text-lg">⭐</div><div className="text-xs text-yellow-600">+{earnedXp} XP</div></div>
+              <div className="flex-1 text-center bg-gray-100 rounded-xl py-2.5"><div className="text-lg">💰</div><div className="text-xs text-yellow-600">+{earnedQp} QP</div></div>
+              <div className="flex-1 text-center bg-gray-100 rounded-xl py-2.5"><div className="text-lg">🔥</div><div className="text-xs text-yellow-600">{game.streak}일 연속</div></div>
             </div>
           </div>
 
           {/* 레벨 진행 */}
           <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-4 mb-4">
-            <div className="flex justify-between text-[11px] mb-1">
+            <div className="flex justify-between text-xs mb-1">
               <span className="text-gray-900 font-semibold">Lv.{game.level} {levelTitle(game.level)}</span>
               <span className="text-violet-600">{Math.round((game.xp / xpForLevel(game.level)) * 100)}%</span>
             </div>
@@ -866,14 +866,14 @@ export default function Home() {
               <div className="text-xs font-bold text-red-600 mb-2">❌ 틀린 {wrongOnes.length}문제 → 오답 노트에 저장됨</div>
               {wrongOnes.map((w, i) => (
                 <div key={i} className="bg-gray-100 rounded-lg p-2.5 mb-1.5">
-                  <p className="text-[10px] text-gray-400 line-clamp-1">{w.question}</p>
-                  <div className="flex gap-2 text-[10px] mt-1">
+                  <p className="text-xs text-gray-400 line-clamp-1">{w.question}</p>
+                  <div className="flex gap-2 text-xs mt-1">
                     <span className="text-red-600">내 답: {w.studentAnswer}번</span>
                     <span className="text-green-600">정답: {w.correctAnswer}번</span>
                   </div>
                 </div>
               ))}
-              <p className="text-[10px] text-gray-500 mt-1.5">내일 약점 특훈에서 다시 만나요!</p>
+              <p className="text-xs text-gray-500 mt-1.5">내일 약점 특훈에서 다시 만나요!</p>
             </div>
           )}
 
@@ -911,13 +911,13 @@ export default function Home() {
                 <div className={`text-xs ${m.current >= m.target ? 'text-gray-500 line-through' : 'text-gray-900'}`}>{m.text}</div>
                 <div className="h-1 bg-gray-100 rounded-full mt-1 overflow-hidden"><div className="h-full bg-violet-500 rounded-full" style={{ width: `${Math.min((m.current / m.target) * 100, 100)}%` }} /></div>
               </div>
-              <span className="text-[10px] text-yellow-600 font-semibold">+{m.qp} QP</span>
+              <span className="text-xs text-yellow-600 font-semibold">+{m.qp} QP</span>
             </div>
           ))}
         </div>
         <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-4 opacity-50">
           <div className="text-xs font-bold text-yellow-600 mb-2">🏆 주간 챌린지</div>
-          <p className="text-[11px] text-gray-500">Lv.5 달성 시 해금됩니다</p>
+          <p className="text-xs text-gray-500">Lv.5 달성 시 해금됩니다</p>
         </div>
       </div>
       <BottomNav />
@@ -943,14 +943,14 @@ export default function Home() {
           ].map((s, i) => (
             <div key={i} className="bg-white shadow-sm rounded-xl p-3 text-center">
               <div className={`text-base font-extrabold ${s.c}`}>{s.v}</div>
-              <div className="text-[9px] text-gray-500">{s.l}</div>
+              <div className="text-xs text-gray-500">{s.l}</div>
             </div>
           ))}
         </div>
         {game.categories.length > 0 && (
           <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-4 mb-4">
             <div className="text-xs font-bold text-gray-900 mb-2">🏷 내 카테고리</div>
-            <div className="flex gap-1.5 flex-wrap">{game.categories.map(c => <span key={c} className="px-2.5 py-1 bg-violet-100 text-violet-600 text-[10px] rounded-lg">{c}</span>)}</div>
+            <div className="flex gap-1.5 flex-wrap">{game.categories.map(c => <span key={c} className="px-2.5 py-1 bg-violet-100 text-violet-600 text-xs rounded-lg">{c}</span>)}</div>
           </div>
         )}
         <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-4">
@@ -958,7 +958,7 @@ export default function Home() {
           <div className="flex gap-2">
             {[1,2,3,4].map(i => <div key={i} className="w-10 h-10 rounded-xl bg-gray-100 border border-dashed border-gray-200 flex items-center justify-center text-sm text-gray-600">🔒</div>)}
           </div>
-          <p className="text-[10px] text-gray-500 mt-2">과목별 정답률 80% + 20문제 이상 풀면 뱃지 획득!</p>
+          <p className="text-xs text-gray-500 mt-2">과목별 정답률 80% + 20문제 이상 풀면 뱃지 획득!</p>
         </div>
       </div>
       <BottomNav />
