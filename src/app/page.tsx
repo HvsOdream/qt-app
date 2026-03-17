@@ -333,7 +333,7 @@ export default function Home() {
   const bloomLabels: Record<number, string> = { 1: '기억', 2: '이해', 3: '적용', 4: '분석', 5: '평가' };
   const diffLabels: Record<number, string> = { 1: '하', 2: '중', 3: '상' };
 
-  // ─── 세로 스와이프 ───
+  // ─── 가로 스와이프 ───
   const NAV_SCREENS = ['home', 'scan', 'quest', 'profile'] as const;
   type NavScreen = typeof NAV_SCREENS[number];
   const swipeStartY = useRef<number | null>(null);
@@ -341,35 +341,35 @@ export default function Home() {
   const swipeDelta = useRef(0);
 
   const handleSwipeStart = (e: React.TouchEvent) => {
-    swipeStartY.current = e.touches[0].clientY;
     swipeStartX.current = e.touches[0].clientX;
+    swipeStartY.current = e.touches[0].clientY;
     swipeDelta.current = 0;
   };
   const handleSwipeMove = (e: React.TouchEvent) => {
-    if (swipeStartY.current === null || swipeStartX.current === null) return;
-    const dy = e.touches[0].clientY - swipeStartY.current;
+    if (swipeStartX.current === null || swipeStartY.current === null) return;
     const dx = e.touches[0].clientX - swipeStartX.current;
-    // 가로 움직임이 더 크면 스와이프 무시 (스크롤 보호)
-    if (Math.abs(dx) > Math.abs(dy)) return;
-    swipeDelta.current = dy;
+    const dy = e.touches[0].clientY - swipeStartY.current;
+    // 세로 움직임이 더 크면 스와이프 무시 (스크롤 보호)
+    if (Math.abs(dy) > Math.abs(dx)) return;
+    swipeDelta.current = dx;
   };
   const handleSwipeEnd = () => {
-    if (swipeStartY.current === null) return;
+    if (swipeStartX.current === null) return;
     const threshold = 80;
     const currentIdx = NAV_SCREENS.indexOf(mode as NavScreen);
-    if (currentIdx === -1) { swipeStartY.current = null; return; }
+    if (currentIdx === -1) { swipeStartX.current = null; return; }
 
     if (swipeDelta.current < -threshold && currentIdx < NAV_SCREENS.length - 1) {
-      // 위로 스와이프 → 다음 화면
+      // 왼쪽으로 스와이프 → 다음 화면
       const next = NAV_SCREENS[currentIdx + 1];
       setMode(next); setActiveNav(next);
     } else if (swipeDelta.current > threshold && currentIdx > 0) {
-      // 아래로 스와이프 → 이전 화면
+      // 오른쪽으로 스와이프 → 이전 화면
       const prev = NAV_SCREENS[currentIdx - 1];
       setMode(prev); setActiveNav(prev);
     }
-    swipeStartY.current = null;
     swipeStartX.current = null;
+    swipeStartY.current = null;
     swipeDelta.current = 0;
   };
 
@@ -384,14 +384,6 @@ export default function Home() {
         className="relative"
       >
         {children}
-        {/* 스와이프 인디케이터 */}
-        {currentIdx >= 0 && (
-          <div className="fixed right-2 top-1/2 -translate-y-1/2 z-40 flex flex-col gap-1.5">
-            {NAV_SCREENS.map((s, i) => (
-              <div key={s} className={`w-1.5 rounded-full transition-all ${i === currentIdx ? 'h-5 bg-violet-500' : 'h-1.5 bg-gray-300'}`} />
-            ))}
-          </div>
-        )}
       </div>
     );
   };
