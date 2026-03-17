@@ -81,6 +81,19 @@ function levelTitle(lv: number) {
   return '마스터';
 }
 
+// ─── 정답 번호 정규화 ───
+// "①" → "1", "3번" → "3", "③" → "3" 등 다양한 포맷을 순수 숫자로 변환
+function normalizeAnswer(raw: string | null | undefined): string {
+  if (!raw) return '';
+  const s = raw.toString().trim();
+  // 원문자 ①②③④⑤ → 숫자
+  const circled: Record<string, string> = { '①': '1', '②': '2', '③': '3', '④': '4', '⑤': '5' };
+  if (circled[s]) return circled[s];
+  // "3번", "3)" 등에서 숫자만 추출
+  const m = s.match(/(\d+)/);
+  return m ? m[1] : s;
+}
+
 // ─── 메인 컴포넌트 ───
 export default function Home() {
   // 화면 모드
@@ -256,7 +269,7 @@ export default function Home() {
     const answer = String(answerIdx + 1);
     setSelectedAnswer(answer);
     setShowExplanation(true);
-    const isCorrect = answer === problems[currentIndex].correct_answer;
+    const isCorrect = answer === normalizeAnswer(problems[currentIndex].correct_answer);
 
     const newConsecutive = isCorrect ? consecutiveCorrect + 1 : 0;
     setConsecutiveCorrect(newConsecutive);
@@ -823,7 +836,7 @@ export default function Home() {
             {problem.choices.map((choice, idx) => {
               const num = String(idx + 1);
               const isSelected = selectedAnswer === num;
-              const isCorrect = num === problem.correct_answer;
+              const isCorrect = num === normalizeAnswer(problem.correct_answer);
               let cls = 'w-full text-left p-3.5 rounded-xl border-2 transition-all text-sm ';
               if (selectedAnswer === null) cls += 'border-gray-100 hover:border-violet-300 text-gray-700';
               else if (isCorrect) cls += 'border-green-300 bg-green-50 text-green-600';
@@ -837,9 +850,9 @@ export default function Home() {
           {showExplanation && (
             <>
               {/* 정답/오답 피드백 */}
-              <div className={`rounded-xl p-4 mb-3 border ${selectedAnswer === problems[currentIndex].correct_answer ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-                <div className="text-xs font-bold mb-1" style={{ color: selectedAnswer === problems[currentIndex].correct_answer ? '#34d399' : '#f87171' }}>
-                  {selectedAnswer === problems[currentIndex].correct_answer
+              <div className={`rounded-xl p-4 mb-3 border ${selectedAnswer === normalizeAnswer(problems[currentIndex].correct_answer) ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                <div className="text-xs font-bold mb-1" style={{ color: selectedAnswer === normalizeAnswer(problems[currentIndex].correct_answer) ? '#34d399' : '#f87171' }}>
+                  {selectedAnswer === normalizeAnswer(problems[currentIndex].correct_answer)
                     ? (consecutiveCorrect >= 3 ? '🔥 완벽해요! 연속 정답 보너스!' : '👏 정확해요!')
                     : '아깝다! 핵심 포인트를 확인해봐요'}
                 </div>
