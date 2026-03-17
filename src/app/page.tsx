@@ -94,6 +94,26 @@ function normalizeAnswer(raw: string | null | undefined): string {
   return m ? m[1] : s;
 }
 
+// ─── 주관식 정답 비교 ───
+// 공백, 전각/반각, ＜< 등을 정규화한 뒤 비교
+function normalizeText(s: string): string {
+  return s
+    .replace(/\s+/g, '')       // 공백 제거
+    .replace(/＜/g, '<').replace(/＞/g, '>') // 전각→반각
+    .replace(/≤/g, '<=').replace(/≥/g, '>=')
+    .replace(/[=＝]/g, '=')
+    .toLowerCase();
+}
+function isShortAnswerCorrect(student: string, correct: string): boolean {
+  // 정규화 후 완전 일치
+  if (normalizeText(student) === normalizeText(correct)) return true;
+  // 숫자만 추출 비교 (예: "a = -6" vs "-6")
+  const sNums = student.match(/-?\d+\.?\d*/g);
+  const cNums = correct.match(/-?\d+\.?\d*/g);
+  if (sNums && cNums && sNums.join(',') === cNums.join(',')) return true;
+  return false;
+}
+
 // ─── 수학 텍스트 렌더링 ───
 // 수식 내 부등호를 유니코드 수학 기호로, 변수를 이탤릭으로 표시
 function MathText({ text, className = '' }: { text: string; className?: string }) {
@@ -166,6 +186,7 @@ export default function Home() {
   const [showExplanation, setShowExplanation] = useState(false);
   const [score, setScore] = useState({ correct: 0, total: 0 });
   const [quizAnswers, setQuizAnswers] = useState<{ question: string; studentAnswer: string; correctAnswer: string; isCorrect: boolean; subject?: string; topic?: string; keywords?: string[] }[]>([]);
+  const [textAnswer, setTextAnswer] = useState<string>(''); // 주관식 입력
 
   // ─── 초기화 ───
   useEffect(() => {
@@ -294,18 +315,14 @@ export default function Home() {
     finally { setLoading(false); }
   };
 
-  // ─── 답 선택 ───
-  const handleAnswer = async (answerIdx: number) => {
-    if (selectedAnswer !== null) return;
-    const answer = String(answerIdx + 1);
+  // ─── 공통 채점 처리 ───
+  const processAnswer = (answer: string, isCorrect: boolean) => {
     setSelectedAnswer(answer);
     setShowExplanation(true);
-    const isCorrect = answer === normalizeAnswer(problems[currentIndex].correct_answer);
 
     const newConsecutive = isCorrect ? consecutiveCorrect + 1 : 0;
     setConsecutiveCorrect(newConsecutive);
 
-    // XP 계산 (연속 정답 보너스)
     let xpGain = isCorrect ? 20 : 5;
     if (isCorrect && newConsecutive >= 5) xpGain = Math.floor(xpGain * 2);
     else if (isCorrect && newConsecutive >= 3) xpGain = Math.floor(xpGain * 1.5);
@@ -323,11 +340,29 @@ export default function Home() {
     setQuizAnswers(prev => [...prev, { question: problem.question_text, studentAnswer: answer, correctAnswer: problem.correct_answer, isCorrect, subject: problem.subject, topic: problem.topic, keywords: problem.keywords }]);
 
     try {
-      await fetch('/api/save-result', {
+      fetch('/api/save-result', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question_text: problem.question_text, choices: problem.choices, correct_answer: problem.correct_answer, student_answer: answer, is_correct: isCorrect, subject: problem.subject || null, topic: problem.topic || null, keywords: problem.keywords || [] }),
       });
     } catch { /* ignore */ }
+  };
+
+  // ─── 객관식 답 선택 ───
+  const handleAnswer = async (answerIdx: number) => {
+    if (selectedAnswer !== null) return;
+    const answer = String(answerIdx + 1);
+    const isCorrect = answer === normalizeAnswer(problems[currentIndex].correct_answer);
+    processAnswer(answer, isCorrect);
+  };
+
+  // ─── 주관식 답 제출 ───
+  const handleTextSubmit = () => {
+    if (selectedAnswer !== null || !textAnswer.trim()) return;
+    const problem = problems[currentIndex];
+    const isEssay = problem.question_type === 'essay';
+    // 서술형은 자동 채점 불가 → 무조건 "확인" 처리 (정답 보여주기)
+    const isCorrect = isEssay ? false : isShortAnswerCorrect(textAnswer.trim(), problem.correct_answer);
+    processAnswer(textAnswer.trim(), isCorrect);
   };
 
   // ─── 다음 문제 / 결과 ───
@@ -357,13 +392,14 @@ export default function Home() {
     setCurrentIndex(prev => prev + 1);
     setSelectedAnswer(null);
     setShowExplanation(false);
+    setTextAnswer('');
   };
 
   // ─── 초기화 ───
   const resetAll = () => {
     setMode('home'); setActiveNav('home'); setProblems([]); setParseResult(null);
     setImageFile(null); setImagePreview(null); setSelectedParsedIdx([]);
-    setSelectedUnit(''); setSelectedUnitName(''); setQuizAnswers([]);
+    setSelectedUnit(''); setSelectedUnitName(''); setQuizAnswers([]); setTextAnswer('');
   };
 
   const goScan = () => { setMode('scan'); setActiveNav('scan'); };
@@ -862,32 +898,84 @@ export default function Home() {
             <p className="text-sm font-medium text-gray-900 leading-relaxed whitespace-pre-wrap"><MathText text={problem.question_text} /></p>
           </div>
 
-          {/* 선택지 */}
-          <div className="space-y-2.5 mb-4">
-            {problem.choices.map((choice, idx) => {
-              const num = String(idx + 1);
-              const isSelected = selectedAnswer === num;
-              const isCorrect = num === normalizeAnswer(problem.correct_answer);
-              let cls = 'w-full text-left p-3.5 rounded-xl border-2 transition-all text-sm ';
-              if (selectedAnswer === null) cls += 'border-gray-100 hover:border-violet-300 text-gray-700';
-              else if (isCorrect) cls += 'border-green-300 bg-green-50 text-green-600';
-              else if (isSelected && !isCorrect) cls += 'border-red-300 bg-red-50 text-red-600';
-              else cls += 'border-gray-100 text-gray-400';
-              return <button key={idx} onClick={() => handleAnswer(idx)} className={cls}><MathText text={choice} /></button>;
-            })}
-          </div>
+          {/* 선택지 or 주관식 입력 */}
+          {problem.choices && problem.choices.length > 0 ? (
+            <div className="space-y-2.5 mb-4">
+              {problem.choices.map((choice, idx) => {
+                const num = String(idx + 1);
+                const isSelected = selectedAnswer === num;
+                const isCorrect = num === normalizeAnswer(problem.correct_answer);
+                let cls = 'w-full text-left p-3.5 rounded-xl border-2 transition-all text-sm ';
+                if (selectedAnswer === null) cls += 'border-gray-100 hover:border-violet-300 text-gray-700';
+                else if (isCorrect) cls += 'border-green-300 bg-green-50 text-green-600';
+                else if (isSelected && !isCorrect) cls += 'border-red-300 bg-red-50 text-red-600';
+                else cls += 'border-gray-100 text-gray-400';
+                return <button key={idx} onClick={() => handleAnswer(idx)} className={cls}><MathText text={choice} /></button>;
+              })}
+            </div>
+          ) : (
+            <div className="mb-4">
+              <div className="bg-violet-50 border border-violet-200 rounded-xl px-3 py-1.5 mb-2">
+                <span className="text-xs text-violet-600 font-medium">✏️ {problem.question_type === 'essay' ? '서술형' : '주관식'} — 답을 직접 입력하세요</span>
+              </div>
+              {problem.question_type === 'essay' ? (
+                <textarea
+                  value={textAnswer} onChange={e => setTextAnswer(e.target.value)}
+                  disabled={selectedAnswer !== null}
+                  placeholder="풀이 과정과 답을 작성하세요..."
+                  className="w-full p-3.5 rounded-xl border-2 border-gray-100 text-sm min-h-[120px] resize-none focus:border-violet-300 focus:outline-none disabled:bg-gray-50 disabled:text-gray-400"
+                />
+              ) : (
+                <input
+                  type="text" value={textAnswer} onChange={e => setTextAnswer(e.target.value)}
+                  disabled={selectedAnswer !== null}
+                  placeholder="답을 입력하세요 (예: -6, a = 3)"
+                  onKeyDown={e => { if (e.key === 'Enter') handleTextSubmit(); }}
+                  className="w-full p-3.5 rounded-xl border-2 border-gray-100 text-sm focus:border-violet-300 focus:outline-none disabled:bg-gray-50 disabled:text-gray-400"
+                />
+              )}
+              {selectedAnswer === null && (
+                <button onClick={handleTextSubmit} disabled={!textAnswer.trim()}
+                  className="w-full mt-2 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-medium disabled:bg-gray-200 disabled:text-gray-400 transition-colors">
+                  제출하기
+                </button>
+              )}
+              {/* 제출 후 정답 표시 */}
+              {selectedAnswer !== null && (
+                <div className={`mt-2 p-3 rounded-xl border text-sm ${
+                  problem.question_type === 'essay' ? 'bg-blue-50 border-blue-200 text-blue-700' :
+                  isShortAnswerCorrect(selectedAnswer, problem.correct_answer) ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'
+                }`}>
+                  <div className="text-xs font-bold mb-1">
+                    {problem.question_type === 'essay' ? '📝 모범답안 확인' :
+                     isShortAnswerCorrect(selectedAnswer, problem.correct_answer) ? '👏 정답!' : '❌ 오답'}
+                  </div>
+                  <div className="text-xs"><span className="font-medium">정답:</span> <MathText text={problem.correct_answer} /></div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* 해설 */}
-          {showExplanation && (
+          {showExplanation && (() => {
+            const isMultipleChoice = problem.choices && problem.choices.length > 0;
+            const answered = selectedAnswer || '';
+            const wasCorrect = isMultipleChoice
+              ? answered === normalizeAnswer(problem.correct_answer)
+              : problem.question_type === 'essay' ? false : isShortAnswerCorrect(answered, problem.correct_answer);
+            const isEssayType = problem.question_type === 'essay';
+            return (
             <>
-              {/* 정답/오답 피드백 */}
-              <div className={`rounded-xl p-4 mb-3 border ${selectedAnswer === normalizeAnswer(problems[currentIndex].correct_answer) ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-                <div className="text-xs font-bold mb-1" style={{ color: selectedAnswer === normalizeAnswer(problems[currentIndex].correct_answer) ? '#34d399' : '#f87171' }}>
-                  {selectedAnswer === normalizeAnswer(problems[currentIndex].correct_answer)
+              {/* 정답/오답 피드백 — 객관식 & 주관식 공통 (서술형은 주관식 블록에서 이미 표시) */}
+              {isMultipleChoice && (
+              <div className={`rounded-xl p-4 mb-3 border ${wasCorrect ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                <div className="text-xs font-bold mb-1" style={{ color: wasCorrect ? '#34d399' : '#f87171' }}>
+                  {wasCorrect
                     ? (consecutiveCorrect >= 3 ? '🔥 완벽해요! 연속 정답 보너스!' : '👏 정확해요!')
                     : '아깝다! 핵심 포인트를 확인해봐요'}
                 </div>
               </div>
+              )}
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
                 <h3 className="font-semibold text-amber-700 text-xs mb-1.5">해설</h3>
                 <p className="text-xs text-amber-600 leading-relaxed whitespace-pre-wrap"><MathText text={problem.explanation} /></p>
@@ -896,7 +984,8 @@ export default function Home() {
                 {currentIndex + 1 >= problems.length ? '결과 보기' : '다음 문제'}
               </button>
             </>
-          )}
+            );
+          })()}
         </div>
       </div>
     );
