@@ -94,6 +94,37 @@ function normalizeAnswer(raw: string | null | undefined): string {
   return m ? m[1] : s;
 }
 
+// ─── 수학 텍스트 렌더링 ───
+// 수식 내 부등호를 유니코드 수학 기호로, 변수를 이탤릭으로 표시
+function MathText({ text, className = '' }: { text: string; className?: string }) {
+  // 1) ASCII 부등호 → 유니코드 수학 기호
+  let processed = text
+    .replace(/(<=[^>])/g, (m) => m) // 보호: HTML 아닌지 체크
+    .replace(/>=|≥/g, '≥')
+    .replace(/<=|≤/g, '≤')
+    .replace(/(?<![<\w])>(?![>=\w])/g, '＞')
+    .replace(/(?<![<\w])<(?![<=\w])/g, '＜');
+
+  // 2) 수식 패턴 감지: 숫자, 연산자, 변수가 포함된 부분을 이탤릭 수학체로 감싸기
+  // 단독 변수(x, y, a, b, k 등)를 이탤릭으로
+  const parts = processed.split(/([a-zA-Z](?=[^a-zA-Z가-힣]|$))/g);
+
+  const elements: React.ReactNode[] = [];
+  let i = 0;
+  while (i < parts.length) {
+    const part = parts[i];
+    // 단독 알파벳 변수 (1글자, 뒤에 한글이나 영문 단어가 아닌 경우)
+    if (part && /^[a-zA-Z]$/.test(part)) {
+      elements.push(<span key={i} style={{ fontStyle: 'italic', fontFamily: 'Georgia, "Times New Roman", serif' }}>{part}</span>);
+    } else if (part) {
+      elements.push(<span key={i}>{part}</span>);
+    }
+    i++;
+  }
+
+  return <span className={className}>{elements}</span>;
+}
+
 // ─── 메인 컴포넌트 ───
 export default function Home() {
   // 화면 모드
@@ -828,7 +859,7 @@ export default function Home() {
 
           {/* 문제 카드 */}
           <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-5 mb-4">
-            <p className="text-sm font-medium text-gray-900 leading-relaxed whitespace-pre-wrap">{problem.question_text}</p>
+            <p className="text-sm font-medium text-gray-900 leading-relaxed whitespace-pre-wrap"><MathText text={problem.question_text} /></p>
           </div>
 
           {/* 선택지 */}
@@ -842,7 +873,7 @@ export default function Home() {
               else if (isCorrect) cls += 'border-green-300 bg-green-50 text-green-600';
               else if (isSelected && !isCorrect) cls += 'border-red-300 bg-red-50 text-red-600';
               else cls += 'border-gray-100 text-gray-400';
-              return <button key={idx} onClick={() => handleAnswer(idx)} className={cls}>{choice}</button>;
+              return <button key={idx} onClick={() => handleAnswer(idx)} className={cls}><MathText text={choice} /></button>;
             })}
           </div>
 
@@ -859,7 +890,7 @@ export default function Home() {
               </div>
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
                 <h3 className="font-semibold text-amber-700 text-xs mb-1.5">해설</h3>
-                <p className="text-xs text-amber-600 leading-relaxed whitespace-pre-wrap">{problem.explanation}</p>
+                <p className="text-xs text-amber-600 leading-relaxed whitespace-pre-wrap"><MathText text={problem.explanation} /></p>
               </div>
               <button onClick={nextProblem} className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-medium">
                 {currentIndex + 1 >= problems.length ? '결과 보기' : '다음 문제'}
