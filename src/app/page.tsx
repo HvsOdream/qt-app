@@ -21,6 +21,7 @@ interface ParseResult {
 }
 
 interface QuizProblem {
+  id?: string;  // question_bank UUID (DB 저장 후)
   question_text: string;
   choices: string[];
   correct_answer: string;
@@ -31,6 +32,10 @@ interface QuizProblem {
   keywords?: string[];
   difficulty?: number;
   question_type?: string;
+}
+
+interface BankCategory {
+  [subject: string]: { [topic: string]: number };
 }
 
 interface Unit {
@@ -150,7 +155,7 @@ export default function Home() {
   // 화면 모드
   const [mode, setMode] = useState<
     'loading' | 'onboard1' | 'onboard2' | 'onboard3' | 'choice' |
-    'home' | 'scan' | 'parsed' | 'quiz' | 'result' | 'quest' | 'profile'
+    'home' | 'scan' | 'parsed' | 'preview' | 'quiz' | 'result' | 'quest' | 'bank' | 'profile'
   >('loading');
   const [tab, setTab] = useState<'photo' | 'unit'>('photo');
   const [activeNav, setActiveNav] = useState<'home' | 'scan' | 'quest' | 'profile'>('home');
@@ -187,6 +192,14 @@ export default function Home() {
   const [score, setScore] = useState({ correct: 0, total: 0 });
   const [quizAnswers, setQuizAnswers] = useState<{ question: string; studentAnswer: string; correctAnswer: string; isCorrect: boolean; subject?: string; topic?: string; keywords?: string[] }[]>([]);
   const [textAnswer, setTextAnswer] = useState<string>(''); // 주관식 입력
+
+  // 문제은행 상태
+  const [bankProblems, setBankProblems] = useState<QuizProblem[]>([]);
+  const [bankCategories, setBankCategories] = useState<BankCategory>({});
+  const [bankTotal, setBankTotal] = useState(0);
+  const [bankFilter, setBankFilter] = useState<{ subject?: string; topic?: string }>({});
+  const [bankLoading, setBankLoading] = useState(false);
+  const [previewExpanded, setPreviewExpanded] = useState<number | null>(null);
 
   // ─── 초기화 ───
   useEffect(() => {
@@ -289,7 +302,8 @@ export default function Home() {
         setProblems(allProblems.slice(0, count));
         setCurrentIndex(0); setSelectedAnswer(null); setShowExplanation(false);
         setScore({ correct: 0, total: 0 }); setQuizAnswers([]); setConsecutiveCorrect(0);
-        setMode('quiz');
+        setPreviewExpanded(null);
+        setMode('preview');
       }
     } catch { alert('문제 생성에 실패했습니다.'); }
     finally { setLoading(false); }
@@ -309,7 +323,8 @@ export default function Home() {
         setProblems(data.problems);
         setCurrentIndex(0); setSelectedAnswer(null); setShowExplanation(false);
         setScore({ correct: 0, total: 0 }); setQuizAnswers([]); setConsecutiveCorrect(0);
-        setMode('quiz');
+        setPreviewExpanded(null);
+        setMode('preview');
       }
     } catch { console.error('문제 생성 실패'); }
     finally { setLoading(false); }
@@ -342,7 +357,7 @@ export default function Home() {
     try {
       fetch('/api/save-result', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question_text: problem.question_text, choices: problem.choices, correct_answer: problem.correct_answer, student_answer: answer, is_correct: isCorrect, subject: problem.subject || null, topic: problem.topic || null, keywords: problem.keywords || [] }),
+        body: JSON.stringify({ question_text: problem.question_text, choices: problem.choices, correct_answer: problem.correct_answer, student_answer: answer, is_correct: isCorrect, subject: problem.subject || null, topic: problem.topic || null, keywords: problem.keywords || [], question_bank_id: problem.id || null }),
       });
     } catch { /* ignore */ }
   };
@@ -400,6 +415,40 @@ export default function Home() {
     setMode('home'); setActiveNav('home'); setProblems([]); setParseResult(null);
     setImageFile(null); setImagePreview(null); setSelectedParsedIdx([]);
     setSelectedUnit(''); setSelectedUnitName(''); setQuizAnswers([]); setTextAnswer('');
+    setPreviewExpanded(null);
+  };
+
+  // ─── 문제은행 불러오기 ───
+  const loadBank = async (filter?: { subject?: string; topic?: string }) => {
+    setBankLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (filter?.subject) params.set('subject', filter.subject);
+      if (filter?.topic) params.set('topic', filter.topic);
+      const res = await fetch(`/api/question-bank?${params.toString()}`);
+      const data = await res.json();
+      setBankProblems(data.problems || []);
+      setBankCategories(data.categories || {});
+      setBankTotal(data.total || 0);
+    } catch { /* ignore */ }
+    finally { setBankLoading(false); }
+  };
+
+  // ─── 문제은행에서 퀴즈 시작 ───
+  const startBankQuiz = (selected: QuizProblem[]) => {
+    setProblems(selected);
+    setCurrentIndex(0); setSelectedAnswer(null); setShowExplanation(false);
+    setScore({ correct: 0, total: 0 }); setQuizAnswers([]); setConsecutiveCorrect(0);
+    setTextAnswer('');
+    setMode('quiz');
+  };
+
+  // ─── 미리보기 → 퀴즈 시작 ───
+  const startQuizFromPreview = () => {
+    setCurrentIndex(0); setSelectedAnswer(null); setShowExplanation(false);
+    setScore({ correct: 0, total: 0 }); setQuizAnswers([]); setConsecutiveCorrect(0);
+    setTextAnswer('');
+    setMode('quiz');
   };
 
   const goScan = () => { setMode('scan'); setActiveNav('scan'); };
@@ -476,7 +525,7 @@ export default function Home() {
           {[
             { id: 'home' as const, icon: '🏠', label: '홈', action: () => { setMode('home'); setActiveNav('home'); } },
             { id: 'scan' as const, icon: '📷', label: '스캔', action: () => { setMode('scan'); setActiveNav('scan'); } },
-            { id: 'quest' as const, icon: '🎮', label: '퀘스트', action: () => { setMode('quest'); setActiveNav('quest'); } },
+            { id: 'quest' as const, icon: '📦', label: '문제은행', action: () => { loadBank(); setMode('bank'); setActiveNav('quest'); } },
             { id: 'profile' as const, icon: '👤', label: '내 정보', action: () => { setMode('profile'); setActiveNav('profile'); } },
           ].map(n => (
             <button key={n.id} onClick={n.action} className={`flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl transition-all ${activeNav === n.id ? 'text-violet-600 bg-violet-50' : 'text-gray-400 hover:text-gray-600'}`}>
@@ -869,6 +918,77 @@ export default function Home() {
   );
 
   // ═══════════════════════════════════════
+  // 미리보기 (생성된 문제 확인)
+  // ═══════════════════════════════════════
+  if (mode === 'preview' && problems.length > 0) {
+    const diffLabelsPreview: Record<number, string> = { 1: '하', 2: '중', 3: '상' };
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
+        <div className="max-w-xl mx-auto px-4 py-6">
+          <div className="text-center mb-5">
+            <div className="text-3xl mb-1">📝</div>
+            <h2 className="text-lg font-extrabold text-gray-900">문제 {problems.length}개 생성 완료!</h2>
+            <p className="text-xs text-gray-500 mt-1">문제은행에 저장되었어요</p>
+          </div>
+
+          {/* 저장 확인 배지 */}
+          <div className="bg-green-50 border border-green-200 rounded-xl p-2.5 mb-4 text-center">
+            <span className="text-xs text-green-600 font-medium">✅ 문제은행에 저장 완료 — 언제든 다시 풀 수 있어요</span>
+          </div>
+
+          {/* 문제 목록 */}
+          <div className="space-y-2 mb-5">
+            {problems.map((p, idx) => (
+              <div key={idx} className="bg-white shadow-sm rounded-xl border border-gray-100 overflow-hidden">
+                <div
+                  onClick={() => setPreviewExpanded(previewExpanded === idx ? null : idx)}
+                  className="p-3.5 cursor-pointer"
+                >
+                  <div className="flex items-start gap-2">
+                    <div className="w-6 h-6 rounded-full bg-violet-100 flex items-center justify-center text-xs font-bold text-violet-600 flex-shrink-0">{idx + 1}</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-gray-700 leading-relaxed line-clamp-2"><MathText text={p.question_text} /></p>
+                      <div className="flex gap-1 mt-1.5 flex-wrap">
+                        {p.subject && <span className="px-1.5 py-0.5 bg-violet-100 text-violet-600 text-[10px] rounded">{p.subject}</span>}
+                        {p.topic && <span className="px-1.5 py-0.5 bg-gray-100 text-gray-400 text-[10px] rounded">{p.topic}</span>}
+                        {p.difficulty && <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-600 text-[10px] rounded">{diffLabelsPreview[p.difficulty] || '중'}</span>}
+                        {p.bloom_level && <span className="px-1.5 py-0.5 bg-blue-50 text-blue-500 text-[10px] rounded">{bloomLabels[p.bloom_level] || '이해'}</span>}
+                      </div>
+                    </div>
+                    <span className="text-gray-300 text-xs">{previewExpanded === idx ? '▲' : '▼'}</span>
+                  </div>
+                </div>
+                {/* 펼치면 선택지만 보기 (정답은 숨김) */}
+                {previewExpanded === idx && p.choices && p.choices.length > 0 && (
+                  <div className="px-3.5 pb-3.5 border-t border-gray-50">
+                    <div className="text-[10px] text-gray-400 mb-1.5 mt-2">선택지 미리보기</div>
+                    <div className="space-y-1">
+                      {p.choices.map((c, ci) => (
+                        <div key={ci} className="text-xs text-gray-500 bg-gray-50 rounded-lg px-2.5 py-1.5"><MathText text={c} /></div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* CTA */}
+          <div className="space-y-2.5">
+            <button onClick={startQuizFromPreview} className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold text-[15px] shadow-lg shadow-violet-300/30 active:scale-[0.98] transition-transform">
+              ▶️ 지금 풀어보기
+            </button>
+            <button onClick={goScan} className="w-full py-3 rounded-xl bg-violet-50 border border-violet-200 text-violet-600 font-medium text-sm">
+              📷 다른 문제 스캔하기
+            </button>
+          </div>
+        </div>
+        <BottomNav />
+      </div>
+    );
+  }
+
+  // ═══════════════════════════════════════
   // 퀴즈 화면
   // ═══════════════════════════════════════
   if (mode === 'quiz' && problems.length > 0) {
@@ -1049,10 +1169,11 @@ export default function Home() {
 
           {/* CTA */}
           <div className="space-y-2.5">
-            {wrongOnes.length > 0 && <button onClick={() => { setCurrentIndex(0); setSelectedAnswer(null); setShowExplanation(false); setScore({correct:0,total:0}); setQuizAnswers([]); setConsecutiveCorrect(0); setMode('quiz'); }}
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-600 to-yellow-500 text-black font-bold text-sm">⚡ 같은 문제 다시 풀기</button>}
-            <button onClick={goScan} className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-medium">📷 새 시험지 스캔</button>
-            <button onClick={resetAll} className="w-full py-3 rounded-xl bg-violet-50 border border-violet-200 text-violet-600 font-medium">🏠 홈으로</button>
+            <button onClick={() => { setCurrentIndex(0); setSelectedAnswer(null); setShowExplanation(false); setScore({correct:0,total:0}); setQuizAnswers([]); setConsecutiveCorrect(0); setTextAnswer(''); setMode('quiz'); }}
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-600 to-yellow-500 text-black font-bold text-sm">🔄 같은 문제 다시 풀기</button>
+            <button onClick={() => { loadBank(); setMode('bank'); setActiveNav('quest'); }}
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-medium">📦 문제은행 보기</button>
+            <button onClick={goScan} className="w-full py-3 rounded-xl bg-violet-50 border border-violet-200 text-violet-600 font-medium">📷 새 문제 스캔하기</button>
           </div>
         </div>
         <BottomNav />
@@ -1062,37 +1183,103 @@ export default function Home() {
   }
 
   // ═══════════════════════════════════════
-  // 퀘스트 탭
+  // 문제은행 (bank)
   // ═══════════════════════════════════════
-  if (mode === 'quest') return (
+  if (mode === 'quest' || mode === 'bank') {
+    const subjects = Object.keys(bankCategories);
+    const totalBankCount = Object.values(bankCategories).reduce((acc, topics) => acc + Object.values(topics).reduce((a, b) => a + b, 0), 0);
+
+    return (
     <SwipeWrap><div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
       <div className="max-w-xl mx-auto px-4 py-6">
-        <h1 className="text-xl font-bold text-gray-900 text-center mb-5">🎮 퀘스트</h1>
-        <div className="bg-white shadow-sm border border-violet-200 rounded-2xl p-4 mb-4">
-          <div className="text-xs font-bold text-violet-600 mb-3">📋 일일 미션</div>
-          {[
-            { text: '문제 3개 풀기', target: 3, current: game.totalSolved, qp: 30 },
-            { text: '새 시험지 스캔', target: 1, current: 0, qp: 50 },
-            { text: '오답 특훈 1회', target: 1, current: 0, qp: 40 },
-          ].map((m, i) => (
-            <div key={i} className="flex items-center gap-3 py-2 border-b border-gray-100 last:border-0">
-              <span className="text-sm">{Math.min(m.current, m.target) >= m.target ? '✅' : '📝'}</span>
-              <div className="flex-1">
-                <div className={`text-xs ${m.current >= m.target ? 'text-gray-500 line-through' : 'text-gray-900'}`}>{m.text}</div>
-                <div className="h-1 bg-gray-100 rounded-full mt-1 overflow-hidden"><div className="h-full bg-violet-500 rounded-full" style={{ width: `${Math.min((m.current / m.target) * 100, 100)}%` }} /></div>
+        <div className="text-center mb-5">
+          <h1 className="text-xl font-bold text-gray-900">📦 문제은행</h1>
+          <p className="text-xs text-gray-500 mt-1">생성된 문제가 여기 쌓여요 · 총 {totalBankCount}문제</p>
+        </div>
+
+        {bankLoading ? (
+          <div className="text-center py-12">
+            <span className="inline-block animate-spin text-2xl">⏳</span>
+            <p className="text-xs text-gray-400 mt-2">불러오는 중...</p>
+          </div>
+        ) : totalBankCount === 0 ? (
+          <div className="text-center py-12">
+            <div className="text-5xl mb-4 opacity-30">📦</div>
+            <p className="text-sm text-gray-400 font-medium mb-1">아직 저장된 문제가 없어요</p>
+            <p className="text-xs text-gray-300 mb-4">시험지를 스캔하면 자동으로 쌓여요</p>
+            <button onClick={goScan} className="px-6 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-medium">📷 스캔하러 가기</button>
+          </div>
+        ) : (
+          <>
+            {/* 필터 */}
+            {bankFilter.subject && (
+              <div className="flex items-center gap-2 mb-3">
+                <button onClick={() => { setBankFilter({}); loadBank(); }} className="text-xs text-violet-600 flex items-center gap-0.5">← 전체</button>
+                <span className="text-xs text-gray-500">{bankFilter.subject}{bankFilter.topic ? ` > ${bankFilter.topic}` : ''}</span>
               </div>
-              <span className="text-xs text-yellow-600 font-semibold">+{m.qp} QP</span>
-            </div>
-          ))}
-        </div>
-        <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-4 opacity-50">
-          <div className="text-xs font-bold text-yellow-600 mb-2">🏆 주간 챌린지</div>
-          <p className="text-xs text-gray-500">Lv.5 달성 시 해금됩니다</p>
-        </div>
+            )}
+
+            {/* 과목별 카테고리 */}
+            {!bankFilter.subject && subjects.map(subject => {
+              const topics = bankCategories[subject];
+              const subjectTotal = Object.values(topics).reduce((a, b) => a + b, 0);
+              return (
+                <div key={subject} className="bg-white shadow-sm border border-gray-100 rounded-2xl p-4 mb-3">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-bold text-gray-900">{subject}</span>
+                    <span className="text-xs text-gray-400">{subjectTotal}문제</span>
+                  </div>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {Object.entries(topics).map(([topic, count]) => (
+                      <button key={topic}
+                        onClick={() => { setBankFilter({ subject, topic }); loadBank({ subject, topic }); }}
+                        className="px-2.5 py-1.5 bg-violet-50 hover:bg-violet-100 border border-violet-200 rounded-lg text-xs text-violet-600 transition-colors">
+                        {topic} <span className="text-violet-400">({count})</span>
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => { setBankFilter({ subject }); loadBank({ subject }); }}
+                    className="mt-2 w-full py-2 rounded-lg bg-violet-50 text-violet-600 text-xs font-medium">
+                    ▶️ {subject} 전체 {Math.min(subjectTotal, 5)}문제 풀기
+                  </button>
+                </div>
+              );
+            })}
+
+            {/* 필터된 문제 목록 */}
+            {bankFilter.subject && bankProblems.length > 0 && (
+              <>
+                <div className="space-y-2 mb-4">
+                  {bankProblems.slice(0, 10).map((p, idx) => (
+                    <div key={p.id || idx} className="bg-white shadow-sm rounded-xl border border-gray-100 p-3">
+                      <p className="text-xs text-gray-700 leading-relaxed line-clamp-2"><MathText text={p.question_text} /></p>
+                      <div className="flex gap-1 mt-1.5">
+                        {p.topic && <span className="px-1.5 py-0.5 bg-gray-100 text-gray-400 text-[10px] rounded">{p.topic}</span>}
+                        <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-600 text-[10px] rounded">{diffLabels[p.difficulty || 2]}</span>
+                        <span className="px-1.5 py-0.5 text-gray-300 text-[10px]">
+                          {(p as QuizProblem & { times_served?: number; times_correct?: number }).times_served
+                            ? `${(p as QuizProblem & { times_correct?: number }).times_correct || 0}/${(p as QuizProblem & { times_served?: number }).times_served} 정답`
+                            : '미풀이'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={() => startBankQuiz(bankProblems.slice(0, Math.min(bankProblems.length, 5)))}
+                  className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold text-[15px] shadow-lg shadow-violet-300/30">
+                  ▶️ {Math.min(bankProblems.length, 5)}문제 풀기
+                </button>
+              </>
+            )}
+          </>
+        )}
       </div>
       <BottomNav />
     </div></SwipeWrap>
-  );
+    );
+  }
 
   // ═══════════════════════════════════════
   // 프로필 — 통계 + 미션 + 뱃지 통합

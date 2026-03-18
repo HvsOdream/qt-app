@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
       topic,
       keywords,
       wrong_answer_id,
-      user_id,
+      question_bank_id,
     } = body;
 
     const supabase = getServiceClient();
@@ -29,8 +29,20 @@ export async function POST(request: NextRequest) {
       topic: topic || null,
       keywords: keywords || [],
       wrong_answer_id: wrong_answer_id || null,
-      user_id: user_id || null,
+      question_bank_id: question_bank_id || null,
     });
+
+    // question_bank 통계 업데이트
+    if (question_bank_id) {
+      try {
+        await supabase.rpc('increment_question_stats', {
+          qb_id: question_bank_id,
+          was_correct: is_correct,
+        });
+      } catch (statsError) {
+        console.error('문제 통계 업데이트 실패:', statsError);
+      }
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

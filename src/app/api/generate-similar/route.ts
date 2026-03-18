@@ -89,6 +89,7 @@ export async function POST(request: NextRequest) {
     }
 
     const anthropic = new Anthropic({ apiKey: process.env.CLAUDE_API_KEY });
+    const supabase = getServiceClient();
 
     const diffLabel: Record<number, string> = { 1: '쉽게', 2: '비슷하게', 3: '어렵게' };
     const diffInstruction = difficulty
@@ -148,10 +149,10 @@ JSON 배열로만 출력해.`;
 
     const generated = JSON.parse(jsonText);
 
-    // Supabase에 오답 기록 저장 (선택적)
+    // ─── DB 저장: wrong_answers (원본 오답) ───
+    let wrongAnswerId: string | null = null;
     try {
-      const supabase = getServiceClient();
-      await supabase.from('wrong_answers').insert({
+      const { data: waData } = await supabase.from('wrong_answers').insert({
         original_question: originalProblem.question_text,
         subject: originalProblem.subject || null,
         topic: originalProblem.topic || null,
@@ -159,14 +160,52 @@ JSON 배열로만 출력해.`;
         marked_answer: originalProblem.marked_answer || null,
         correct_answer: originalProblem.correct_answer || null,
         similar_count: count,
-      });
+      }).select('id').single();
+      wrongAnswerId = waData?.id || null;
     } catch (dbError) {
-      // DB 저장 실패해도 문제 생성 응답은 반환
       console.error('오답 기록 저장 실패:', dbError);
     }
 
+    // ─── DB 저장: question_bank (생성된 문제) ───
+    const batchId = crypto.randomUUID();
+    let savedProblems = generated;
+
+    try {
+      const rows = generated.map((q: Record<string, unknown>) => ({
+        question_text: q.question_text,
+        choices: q.choices || [],
+        correct_answer: q.correct_answer,
+        explanation: q.explanation || null,
+        subject: q.subject || originalProblem.subject || null,
+        topic: q.topic || originalProblem.topic || null,
+        keywords: q.keywords || originalProblem.keywords || [],
+        difficulty: q.difficulty || difficulty || 2,
+        bloom_level: q.bloom_level || 2,
+        question_type: q.question_type || 'multiple_choice',
+        source: 'ai_generated',
+        parent_wrong_answer_id: wrongAnswerId,
+        generation_batch_id: batchId,
+      }));
+
+      const { data: bankData, error: bankError } = await supabase
+        .from('question_bank')
+        .insert(rows)
+        .select();
+
+      if (bankError) {
+        console.error('question_bank 저장 실패:', bankError);
+        // DB 저장 실패해도 생성된 문제는 반환 (id 없이)
+      } else if (bankData) {
+        // DB에서 받은 id를 포함한 데이터로 교체
+        savedProblems = bankData;
+      }
+    } catch (bankDbError) {
+      console.error('question_bank 저장 예외:', bankDbError);
+    }
+
     return NextResponse.json({
-      problems: generated,
+      problems: savedProblems,
+      batch_id: batchId,
       original: originalProblem,
       source: 'ai_generated',
     });
