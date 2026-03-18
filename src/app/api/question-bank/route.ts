@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
     const subject = searchParams.get('subject');
     const topic = searchParams.get('topic');
     const difficulty = searchParams.get('difficulty');
+    const keyword = searchParams.get('keyword');
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
 
@@ -20,6 +21,7 @@ export async function GET(request: NextRequest) {
     if (subject) query = query.eq('subject', subject);
     if (topic) query = query.eq('topic', topic);
     if (difficulty) query = query.eq('difficulty', parseInt(difficulty));
+    if (keyword) query = query.contains('keywords', [keyword]);
 
     query = query.range(offset, offset + limit - 1);
 

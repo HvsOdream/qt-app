@@ -57,12 +57,13 @@ interface GameState {
   totalCorrect: number;
   onboardDone: boolean;
   categories: string[];
+  userKeywords: string[];
 }
 
 const DEFAULT_GAME: GameState = {
   xp: 0, level: 1, qp: 0, streak: 0,
   lastPlayDate: '', totalSolved: 0, totalCorrect: 0,
-  onboardDone: false, categories: [],
+  onboardDone: false, categories: [], userKeywords: [],
 };
 
 function loadGame(): GameState {
@@ -157,7 +158,8 @@ export default function Home() {
     'loading' | 'onboard1' | 'onboard2' | 'onboard3' | 'choice' |
     'home' | 'scan' | 'parsed' | 'preview' | 'quiz' | 'result' | 'quest' | 'bank' | 'profile'
   >('loading');
-  const [tab, setTab] = useState<'photo' | 'unit'>('photo');
+  const [tab, setTab] = useState<'photo' | 'keyword'>('photo');
+  const [keywordInput, setKeywordInput] = useState('');
   const [activeNav, setActiveNav] = useState<'home' | 'scan' | 'quest' | 'profile'>('home');
 
   // 게이미피케이션
@@ -197,7 +199,7 @@ export default function Home() {
   const [bankProblems, setBankProblems] = useState<QuizProblem[]>([]);
   const [bankCategories, setBankCategories] = useState<BankCategory>({});
   const [bankTotal, setBankTotal] = useState(0);
-  const [bankFilter, setBankFilter] = useState<{ subject?: string; topic?: string }>({});
+  const [bankFilter, setBankFilter] = useState<{ subject?: string; topic?: string; keyword?: string }>({});
   const [bankLoading, setBankLoading] = useState(false);
   const [previewExpanded, setPreviewExpanded] = useState<number | null>(null);
 
@@ -309,24 +311,25 @@ export default function Home() {
     finally { setLoading(false); }
   };
 
-  // ─── 단원 기반 생성 ───
-  const generateFromUnit = async () => {
-    if (!selectedUnit) return;
+  // ─── 키워드 기반 문제 검색 ───
+  const generateFromKeyword = async (kw: string) => {
+    if (!kw.trim()) return;
     setLoading(true);
     try {
-      const res = await fetch('/api/generate', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ unitId: selectedUnit, difficulty, count }),
-      });
+      // 문제은행에서 해당 키워드 문제 검색
+      const params = new URLSearchParams({ keyword: kw.trim(), limit: String(count) });
+      const res = await fetch(`/api/question-bank?${params.toString()}`);
       const data = await res.json();
-      if (data.problems) {
-        setProblems(data.problems);
+      if (data.problems && data.problems.length > 0) {
+        setProblems(data.problems.slice(0, count));
         setCurrentIndex(0); setSelectedAnswer(null); setShowExplanation(false);
         setScore({ correct: 0, total: 0 }); setQuizAnswers([]); setConsecutiveCorrect(0);
         setPreviewExpanded(null);
         setMode('preview');
+      } else {
+        alert(`'${kw}' 키워드로 저장된 문제가 없어요.\n시험지를 스캔하면 자동으로 쌓여요!`);
       }
-    } catch { console.error('문제 생성 실패'); }
+    } catch { console.error('키워드 검색 실패'); }
     finally { setLoading(false); }
   };
 
@@ -419,12 +422,13 @@ export default function Home() {
   };
 
   // ─── 문제은행 불러오기 ───
-  const loadBank = async (filter?: { subject?: string; topic?: string }) => {
+  const loadBank = async (filter?: { subject?: string; topic?: string; keyword?: string }) => {
     setBankLoading(true);
     try {
       const params = new URLSearchParams();
       if (filter?.subject) params.set('subject', filter.subject);
       if (filter?.topic) params.set('topic', filter.topic);
+      if (filter?.keyword) params.set('keyword', filter.keyword);
       const res = await fetch(`/api/question-bank?${params.toString()}`);
       const data = await res.json();
       setBankProblems(data.problems || []);
@@ -502,7 +506,7 @@ export default function Home() {
     swipeDelta.current = 0;
   };
 
-  // 스와이프 래퍼
+  // 스와이프 래퍼 + 점 인디케이터
   const SwipeWrap = ({ children }: { children: React.ReactNode }) => {
     const currentIdx = NAV_SCREENS.indexOf(mode as NavScreen);
     return (
@@ -513,6 +517,20 @@ export default function Home() {
         className="relative"
       >
         {children}
+        {currentIdx !== -1 && (
+          <div className="fixed bottom-[76px] left-0 right-0 flex justify-center gap-1.5 z-40 pointer-events-none">
+            {NAV_SCREENS.map((_, i) => (
+              <div
+                key={i}
+                className={`rounded-full transition-all duration-200 ${
+                  i === currentIdx
+                    ? 'w-4 h-1.5 bg-violet-500'
+                    : 'w-1.5 h-1.5 bg-gray-300'
+                }`}
+              />
+            ))}
+          </div>
+        )}
       </div>
     );
   };
@@ -686,44 +704,57 @@ export default function Home() {
   if (mode === 'home') return (
     <SwipeWrap><div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
       <div className="max-w-xl mx-auto px-4 pt-6">
-        {/* 미니 레벨 바 */}
-        <div className="flex items-center gap-2 mb-6">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-600 to-violet-400 flex items-center justify-center text-sm border-2 border-violet-300">🧠</div>
-          <div className="flex-1">
-            <XpBar compact />
+        {/* 헤더 — 키워드 맵 카운트 */}
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-violet-600 to-violet-400 flex items-center justify-center text-base shadow-md shadow-violet-200">🗺️</div>
+            <div>
+              <div className="text-sm font-bold text-gray-900">내 학습 맵</div>
+              <div className="text-xs text-violet-500">
+                {(game.userKeywords?.length ?? 0) === 0
+                  ? '아직 키워드 없음'
+                  : `${game.userKeywords.length}개 키워드 탐색 중`}
+              </div>
+            </div>
           </div>
-          <span className="text-xs text-gray-400">Lv.{game.level}</span>
-          {game.streak > 0 && <span className="text-xs text-orange-500 font-bold">🔥{game.streak}</span>}
+          <div className="flex items-center gap-1.5">
+            {game.streak > 0 && (
+              <span className="text-xs text-orange-500 font-bold bg-orange-50 border border-orange-100 px-2 py-1 rounded-lg">🔥{game.streak}일</span>
+            )}
+            <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-lg">{game.totalSolved}문제</span>
+          </div>
         </div>
 
-        {/* 성장하는 맵 영역 */}
-        <div className="bg-white/80 backdrop-blur border border-gray-100 rounded-3xl p-6 mb-6 min-h-[280px] flex flex-col items-center justify-center relative overflow-hidden">
-          {/* 배경 그리드 패턴 */}
+        {/* 키워드 맵 영역 */}
+        <div className="bg-white/80 backdrop-blur border border-gray-100 rounded-3xl p-5 mb-5 min-h-[200px] flex flex-col justify-center relative overflow-hidden">
           <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle, #7c3aed 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
 
-          {game.categories.length === 0 ? (
-            // 첫 사용자 — 빈 맵
-            <div className="text-center relative z-10">
-              <div className="text-5xl mb-4 opacity-30">🗺️</div>
-              <p className="text-sm text-gray-400 font-medium mb-1">아직 탐험하지 않은 영역</p>
-              <p className="text-xs text-gray-300">시험지를 스캔하면 맵이 열려요</p>
+          {(game.userKeywords?.length ?? 0) === 0 ? (
+            <div className="text-center relative z-10 py-4">
+              <div className="text-4xl mb-3 opacity-25">🗺️</div>
+              <p className="text-sm text-gray-400 font-medium mb-1">아직 탐험한 키워드가 없어요</p>
+              <p className="text-xs text-gray-300">문제를 풀면 키워드가 맵에 쌓여요</p>
             </div>
           ) : (
-            // 탐색된 영역 표시
             <div className="relative z-10 w-full">
-              <div className="text-xs text-gray-400 mb-3 font-medium">🗺️ 내 학습 맵</div>
-              <div className="grid grid-cols-2 gap-2">
-                {game.categories.map(c => (
-                  <div key={c} className="bg-violet-50 border border-violet-200 rounded-xl px-3 py-3 text-center transition-all hover:scale-[1.02]">
-                    <div className="text-sm font-bold text-violet-700">{c}</div>
-                    <div className="text-xs text-violet-400 mt-0.5">{game.totalSolved > 0 ? `${game.totalSolved}문제 탐색` : '탐색 시작'}</div>
-                  </div>
+              <div className="flex flex-wrap gap-2">
+                {game.userKeywords.map(kw => (
+                  <button
+                    key={kw}
+                    onClick={() => { loadBank({ keyword: kw }); setBankFilter({ keyword: kw }); setMode('bank'); setActiveNav('quest'); }}
+                    className="bg-violet-50 border border-violet-200 rounded-xl px-3 py-2 text-left hover:bg-violet-100 active:scale-95 transition-all"
+                  >
+                    <div className="text-xs font-bold text-violet-700">{kw}</div>
+                    <div className="text-[10px] text-violet-400 mt-0.5">탭해서 풀기</div>
+                  </button>
                 ))}
-                {/* 미발견 영역 힌트 */}
-                <div className="border-2 border-dashed border-gray-200 rounded-xl px-3 py-3 text-center">
-                  <div className="text-sm font-bold text-gray-300">???</div>
-                  <div className="text-xs text-gray-300 mt-0.5">미발견 영역</div>
-                </div>
+                <button
+                  onClick={goScan}
+                  className="border-2 border-dashed border-gray-200 rounded-xl px-3 py-2 flex flex-col items-center justify-center hover:border-violet-300 transition-colors"
+                >
+                  <div className="text-xs font-medium text-gray-400">＋</div>
+                  <div className="text-[10px] text-gray-300 mt-0.5">키워드 추가</div>
+                </button>
               </div>
             </div>
           )}
@@ -753,7 +784,7 @@ export default function Home() {
         {/* 탭 */}
         <div className="flex bg-gray-100 rounded-xl p-1 mb-4">
           <button onClick={() => setTab('photo')} className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'photo' ? 'bg-violet-600 text-white' : 'text-gray-500'}`}>📷 사진으로 풀기</button>
-          <button onClick={() => setTab('unit')} className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'unit' ? 'bg-violet-600 text-white' : 'text-gray-500'}`}>📚 단원 선택</button>
+          <button onClick={() => setTab('keyword')} className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'keyword' ? 'bg-violet-600 text-white' : 'text-gray-500'}`}>🔑 키워드로 풀기</button>
         </div>
 
         {/* 사진 탭 */}
@@ -802,50 +833,50 @@ export default function Home() {
           </>
         )}
 
-        {/* 단원 탭 */}
-        {tab === 'unit' && (
+        {/* 키워드 탭 */}
+        {tab === 'keyword' && (
           <>
             <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-5 mb-4">
-              <h2 className="text-sm font-semibold text-gray-900 mb-1">단원 선택</h2>
-              <p className="text-xs text-gray-500 mb-3">중2 과학 · 천재교과서</p>
-              <div className="space-y-1.5 max-h-64 overflow-y-auto">
-                {units.map(l1 => (
-                  <details key={l1.id} className="group">
-                    <summary className="cursor-pointer py-1.5 px-3 rounded-lg hover:bg-gray-100 font-medium text-gray-700 text-xs">{l1.code}. {l1.title}</summary>
-                    <div className="ml-3 mt-1 space-y-0.5">
-                      {l1.children?.map(l2 => (
-                        <details key={l2.id}>
-                          <summary className="cursor-pointer py-1 px-3 rounded text-xs text-gray-400 hover:bg-gray-100">{l2.code}. {l2.title}</summary>
-                          <div className="ml-3 mt-0.5 space-y-0.5">
-                            {l2.children?.map(l3 => (
-                              <button key={l3.id} onClick={() => { setSelectedUnit(l3.id); setSelectedUnitName(`${l3.code} ${l3.title}`); }}
-                                className={`w-full text-left py-1 px-3 rounded text-xs transition-colors ${selectedUnit === l3.id ? 'bg-violet-100 text-violet-500 font-medium' : 'text-gray-500 hover:bg-gray-100'}`}>
-                                {l3.code}. {l3.title}
-                              </button>
-                            ))}
-                          </div>
-                        </details>
-                      ))}
-                    </div>
-                  </details>
-                ))}
-              </div>
-              {selectedUnit && <div className="mt-2 text-xs text-violet-600 bg-violet-100 px-3 py-1.5 rounded-lg">선택: {selectedUnitName}</div>}
-            </div>
-            <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-5 mb-4">
-              <div className="flex gap-4">
-                <div className="flex-1">
-                  <label className="text-xs font-medium text-gray-400 mb-1.5 block">난이도</label>
-                  <div className="flex gap-1.5">{[1,2,3].map(d => <button key={d} onClick={() => setDifficulty(d)} className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${difficulty === d ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500'}`}>{diffLabels[d]}</button>)}</div>
+              <h2 className="text-sm font-semibold text-gray-900 mb-1">🔑 키워드로 문제 찾기</h2>
+              <p className="text-xs text-gray-500 mb-4">문제은행에서 해당 키워드 문제를 바로 꺼내 풀어요</p>
+              <input
+                type="text"
+                value={keywordInput}
+                onChange={e => setKeywordInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && generateFromKeyword(keywordInput)}
+                placeholder="예: 광합성, 이차방정식, 세포분열..."
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:border-violet-400 focus:bg-white mb-3"
+              />
+              {/* 내 맵 키워드 빠른 선택 */}
+              {(game.userKeywords?.length ?? 0) > 0 && (
+                <div className="mb-3">
+                  <p className="text-xs text-gray-400 mb-2">📌 내 맵에서 선택</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {game.userKeywords.map(kw => (
+                      <button
+                        key={kw}
+                        onClick={() => setKeywordInput(kw)}
+                        className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${keywordInput === kw ? 'bg-violet-600 text-white border-violet-600' : 'bg-violet-50 text-violet-600 border-violet-200 hover:bg-violet-100'}`}
+                      >
+                        {kw}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+              )}
+              <div className="flex gap-4">
                 <div className="flex-1">
                   <label className="text-xs font-medium text-gray-400 mb-1.5 block">문제 수</label>
                   <select value={count} onChange={e => setCount(Number(e.target.value))} className="w-full py-1.5 px-2 rounded-lg border border-gray-200 bg-gray-100 text-sm text-gray-900">{[3,5,10].map(n => <option key={n} value={n}>{n}문제</option>)}</select>
                 </div>
               </div>
             </div>
-            <button onClick={generateFromUnit} disabled={!selectedUnit || loading} className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold disabled:bg-gray-200 disabled:text-gray-400 transition-colors">
-              {loading ? '문제 생성 중...' : '문제 풀기 시작'}
+            <button
+              onClick={() => generateFromKeyword(keywordInput)}
+              disabled={!keywordInput.trim() || loading}
+              className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold disabled:bg-gray-200 disabled:text-gray-400 transition-colors"
+            >
+              {loading ? '문제 찾는 중...' : `🔑 "${keywordInput || '키워드'}" 문제 풀기`}
             </button>
           </>
         )}
@@ -1166,6 +1197,45 @@ export default function Home() {
               <p className="text-xs text-gray-500 mt-1.5">내일 약점 특훈에서 다시 만나요!</p>
             </div>
           )}
+
+          {/* 키워드 → 맵에 추가 */}
+          {(() => {
+            const allKw = Array.from(new Set(quizAnswers.flatMap(a => a.keywords || []))).filter(Boolean);
+            if (allKw.length === 0) return null;
+            const userKw = game.userKeywords ?? [];
+            const newKw = allKw.filter(k => !userKw.includes(k));
+            const existingKw = allKw.filter(k => userKw.includes(k));
+            return (
+              <div className="bg-violet-50 border border-violet-200 rounded-2xl p-4 mb-4">
+                <div className="text-xs font-bold text-violet-700 mb-2">🗺️ 이번 문제의 키워드</div>
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {allKw.map(kw => (
+                    <span key={kw} className={`text-xs px-2.5 py-1 rounded-lg font-medium ${userKw.includes(kw) ? 'bg-violet-200 text-violet-700' : 'bg-white border border-violet-300 text-violet-600'}`}>
+                      {userKw.includes(kw) ? '✓ ' : ''}{kw}
+                    </span>
+                  ))}
+                </div>
+                {newKw.length > 0 && (
+                  <button
+                    onClick={() => {
+                      setGame(prev => {
+                        const merged = Array.from(new Set([...(prev.userKeywords ?? []), ...newKw]));
+                        const g = { ...prev, userKeywords: merged };
+                        saveGame(g);
+                        return g;
+                      });
+                    }}
+                    className="w-full py-2 rounded-xl bg-violet-600 text-white text-xs font-bold active:scale-95 transition-transform"
+                  >
+                    ＋ {newKw.length}개 키워드를 내 맵에 추가
+                  </button>
+                )}
+                {newKw.length === 0 && (
+                  <p className="text-xs text-violet-500 text-center">✓ 이미 내 맵에 있는 키워드예요</p>
+                )}
+              </div>
+            );
+          })()}
 
           {/* CTA */}
           <div className="space-y-2.5">
