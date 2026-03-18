@@ -176,7 +176,8 @@ export default function Home() {
   const [parsing, setParsing] = useState(false);
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
   const [selectedParsedIdx, setSelectedParsedIdx] = useState<number[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);       // 카메라 촬영
+  const galleryInputRef = useRef<HTMLInputElement>(null);    // 갤러리 선택
 
   // 단원 선택 상태
   const [units, setUnits] = useState<Unit[]>([]);
@@ -791,17 +792,33 @@ export default function Home() {
         {tab === 'photo' && (
           <>
             <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-5 mb-4">
+              {/* 카메라 촬영용 input */}
               <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={handleImageSelect} className="hidden" />
+              {/* 갤러리 선택용 input (capture 없음) */}
+              <input ref={galleryInputRef} type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
+
               {imagePreview ? (
                 <div className="relative mb-3">
                   <img src={imagePreview} alt="업로드된 문제" className="w-full rounded-xl border border-gray-200 max-h-72 object-contain bg-gray-100" />
                   <button onClick={() => { setImageFile(null); setImagePreview(null); setParseResult(null); }} className="absolute top-2 right-2 w-7 h-7 bg-black/40 text-white rounded-full flex items-center justify-center text-xs">✕</button>
                 </div>
               ) : (
-                <button onClick={() => fileInputRef.current?.click()} className="w-full h-44 border-2 border-dashed border-violet-300 rounded-xl flex flex-col items-center justify-center gap-2 text-violet-600/70 hover:border-violet-400 transition-colors mb-3">
-                  <span className="text-4xl">📸</span>
-                  <span className="text-sm font-medium">사진 찍기 / 이미지 선택</span>
-                </button>
+                <div className="flex gap-3 mb-3">
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex-1 h-36 border-2 border-dashed border-violet-300 rounded-xl flex flex-col items-center justify-center gap-2 text-violet-600/70 hover:border-violet-400 hover:bg-violet-50/50 transition-colors active:scale-95"
+                  >
+                    <span className="text-3xl">📷</span>
+                    <span className="text-xs font-medium">촬영하기</span>
+                  </button>
+                  <button
+                    onClick={() => galleryInputRef.current?.click()}
+                    className="flex-1 h-36 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center gap-2 text-gray-500/70 hover:border-gray-400 hover:bg-gray-50/50 transition-colors active:scale-95"
+                  >
+                    <span className="text-3xl">🖼️</span>
+                    <span className="text-xs font-medium">갤러리 선택</span>
+                  </button>
+                </div>
               )}
 
               {/* 촬영 가이드 */}
