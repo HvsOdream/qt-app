@@ -126,7 +126,7 @@ JSON 배열로만 출력해.`;
     const estimatedTokens = Math.min(4096, Math.max(1500, count * 600));
 
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: estimatedTokens,
       system: SYSTEM_PROMPT,
       messages: [
