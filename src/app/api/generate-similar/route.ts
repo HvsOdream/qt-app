@@ -145,11 +145,27 @@ JSON 배열로만 출력해.`;
     }
 
     let jsonText = textContent.text.trim();
-    if (jsonText.startsWith('```')) {
-      jsonText = jsonText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-    }
 
-    const generated = JSON.parse(jsonText);
+    // 1) 마크다운 코드블록 제거
+    jsonText = jsonText.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
+
+    // 2) JSON 배열을 정규식으로 추출 (앞뒤 설명 텍스트 무시)
+    const arrayMatch = jsonText.match(/\[[\s\S]*\]/);
+    if (arrayMatch) jsonText = arrayMatch[0];
+
+    // 3) 파싱 시도
+    let generated: Record<string, unknown>[];
+    try {
+      generated = JSON.parse(jsonText);
+    } catch {
+      // 4) 실패 시 단일 객체일 수도 있으므로 배열로 감싸서 재시도
+      const objMatch = textContent.text.match(/\{[\s\S]*\}/);
+      if (objMatch) {
+        generated = [JSON.parse(objMatch[0])];
+      } else {
+        throw new Error('JSON 파싱 실패: ' + textContent.text.slice(0, 100));
+      }
+    }
 
     // ─── DB 저장: wrong_answers (원본 오답) ───
     let wrongAnswerId: string | null = null;

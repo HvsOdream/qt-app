@@ -305,6 +305,7 @@ export default function Home() {
   const handleParseImage = async () => {
     if (!imageFile) return;
     setParsing(true);
+    startBloomTimer(20);
     try {
       const formData = new FormData();
       formData.append('image', imageFile);
@@ -324,8 +325,10 @@ export default function Home() {
           return g;
         });
       }
+      stopBloomTimer();
       setMode('parsed');
     } catch {
+      stopBloomTimer();
       alert('이미지 분석에 실패했습니다. 다시 시도해주세요.');
     } finally { setParsing(false); }
   };
@@ -364,7 +367,11 @@ export default function Home() {
           return fetch('/api/generate-similar', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ originalProblem: original, count: Math.max(1, Math.floor(count / selectedParsedIdx.length)), difficulty }),
-          }).then(r => r.json()).catch(() => ({ problems: [] }));
+          }).then(async r => {
+            const d = await r.json();
+            if (!r.ok) console.error('generate-similar 오류:', d.error);
+            return d;
+          }).catch(e => { console.error('네트워크 오류:', e); return { problems: [] }; });
         })
       );
       const allProblems: QuizProblem[] = results.flatMap(d => d.problems || []);
@@ -641,8 +648,10 @@ export default function Home() {
 
   // ─── 꽃 피는 로딩 오버레이 ───
   const BLOOM_EMOJIS = ['🌱', '🌿', '🌸', '🌺', '🌻'];
-  const BLOOM_MSGS = ['시험지 분석 중...', '개념 이해 중...', '문제 설계 중...', '마무리 다듬는 중...', '완성!'];
-  const BloomLoading = () => !loading ? null : (
+  const PARSE_MSGS  = ['시험지 읽는 중...', '글자 인식 중...', '문제 구조화 중...', '과목 분류 중...', '분석 완료!'];
+  const GEN_MSGS    = ['개념 이해 중...', '문제 설계 중...', '선택지 구성 중...', '마무리 다듬는 중...', '완성!'];
+  const BLOOM_MSGS  = parsing ? PARSE_MSGS : GEN_MSGS;
+  const BloomLoading = () => !(loading || parsing) ? null : (
     <div className="fixed inset-0 z-[200] bg-[#0a2265]/90 backdrop-blur-sm flex flex-col items-center justify-center px-8">
       {/* 꽃 이모지 — 단계별 크기 펄스 */}
       <div
@@ -988,6 +997,7 @@ export default function Home() {
   // ═══════════════════════════════════════
   if (mode === 'scan') return (
     <div {...swipeProps} className="relative"><div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
+      <BloomLoading />
       <div className="max-w-xl mx-auto px-4 py-6">
         <div className="text-center mb-5">
           <h1 className="text-xl font-bold text-gray-900">📷 시험지 스캔</h1>
