@@ -58,12 +58,15 @@ interface GameState {
   onboardDone: boolean;
   categories: string[];
   userKeywords: string[];
+  studyGrade: string;    // 학년/상황 (예: 고2, 정보처리기사)
+  studySubject: string;  // 과목/전공 (예: 수학, 자료구조)
 }
 
 const DEFAULT_GAME: GameState = {
   xp: 0, level: 1, qp: 0, streak: 0,
   lastPlayDate: '', totalSolved: 0, totalCorrect: 0,
   onboardDone: false, categories: [], userKeywords: [],
+  studyGrade: '', studySubject: '',
 };
 
 function loadGame(): GameState {
@@ -160,11 +163,10 @@ export default function Home() {
   >('loading');
   const [tab, setTab] = useState<'photo' | 'keyword'>('photo');
   const [keywordInput, setKeywordInput] = useState('');
-  // 홈 맵 키워드 씨앗
-  const [keywordSeedInput, setKeywordSeedInput] = useState('');
-  const [expandedKeywords, setExpandedKeywords] = useState<string[]>([]);
-  const [expandingKeywords, setExpandingKeywords] = useState(false);
-  const [expandError, setExpandError] = useState(false);
+  // 홈 문제 생성 입력
+  const [homeGrade, setHomeGrade] = useState('');      // 학년/상황
+  const [homeSubject, setHomeSubject] = useState('');  // 과목/전공
+  const [homeUnit, setHomeUnit] = useState('');        // 단원 (선택)
   const [activeNav, setActiveNav] = useState<'home' | 'scan' | 'quest' | 'profile'>('home');
   // 꽃 피는 로딩
   const [bloomStage, setBloomStage] = useState(0);
@@ -220,6 +222,9 @@ export default function Home() {
   useEffect(() => {
     const g = loadGame();
     setGame(g);
+    // 이전 학습 설정 복원
+    if (g.studyGrade) setHomeGrade(g.studyGrade);
+    if (g.studySubject) setHomeSubject(g.studySubject);
     // 스트릭 체크
     const today = new Date().toISOString().slice(0, 10);
     if (g.lastPlayDate && g.lastPlayDate !== today) {
@@ -506,27 +511,48 @@ export default function Home() {
     setPreviewExpanded(null);
   };
 
-  // ─── 키워드 확장 (홈 맵 씨앗) ───
-  const expandKeywords = async (seed: string) => {
-    if (!seed.trim()) return;
-    setExpandingKeywords(true);
-    setExpandError(false);
+  // ─── 학습 목표 기반 문제 생성 (홈) ───
+  const generateFromGoal = async () => {
+    if (!homeSubject.trim()) return;
+    const topic = homeUnit.trim() || homeSubject.trim();
+    setLoading(true);
+    startBloomTimer(15);
+    // 학습 설정 저장
+    setGame(prev => {
+      const g = { ...prev, studyGrade: homeGrade.trim(), studySubject: homeSubject.trim() };
+      saveGame(g);
+      return g;
+    });
     try {
-      const res = await fetch('/api/expand-keywords', {
+      const res = await fetch('/api/generate-by-topic', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keyword: seed.trim() }),
+        body: JSON.stringify({
+          grade: homeGrade.trim(),
+          subject: homeSubject.trim(),
+          topic,
+          difficulty,
+          count,
+        }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      const kws: string[] = data.keywords || [];
-      if (kws.length === 0) throw new Error('empty');
-      setExpandedKeywords(kws);
-    } catch (e) {
-      console.error('expand-keywords 오류:', e);
-      setExpandError(true);
-    }
-    finally { setExpandingKeywords(false); }
+      const allProblems: QuizProblem[] = data.problems || [];
+      if (allProblems.length > 0) {
+        setProblems(allProblems.slice(0, count));
+        setCurrentIndex(0); setSelectedAnswer(null); setShowExplanation(false);
+        setScore({ correct: 0, total: 0 }); setQuizAnswers([]); setConsecutiveCorrect(0);
+        setPreviewExpanded(null);
+        stopBloomTimer();
+        setMode('preview');
+      } else {
+        stopBloomTimer();
+        alert('문제 생성에 실패했습니다. 다시 시도해주세요.');
+      }
+    } catch {
+      stopBloomTimer();
+      alert('문제 생성 중 오류가 발생했습니다.');
+    } finally { setLoading(false); }
   };
+
 
   // ─── 문제은행 불러오기 ───
   const loadBank = async (filter?: { subject?: string; topic?: string; keyword?: string }) => {
@@ -868,6 +894,7 @@ export default function Home() {
   // ═══════════════════════════════════════
   if (mode === 'home') return (
     <div {...swipeProps} className="relative"><div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
+      <BloomLoading />
       <div className="max-w-xl mx-auto px-4 pt-6">
         {/* 헤더 */}
         <div className="flex items-center justify-between mb-5">
@@ -911,6 +938,95 @@ export default function Home() {
         {/* XP 바 */}
         <div className="bg-white shadow-sm rounded-xl px-3 py-2.5 mb-4 border border-gray-50">
           <XpBar />
+        </div>
+
+        {/* 📚 문제 만들기 카드 */}
+        <div className="bg-white shadow-sm border border-violet-100 rounded-2xl p-4 mb-4">
+          <div className="flex items-center gap-1.5 mb-3">
+            <span className="text-sm font-bold text-gray-900">📚 오늘 뭘 공부할까요?</span>
+          </div>
+
+          {/* 학년/상황 */}
+          <div className="mb-2">
+            <label className="text-[10px] text-gray-400 font-medium mb-1 block">학년 / 상황</label>
+            <input
+              type="text"
+              value={homeGrade}
+              onChange={e => setHomeGrade(e.target.value)}
+              placeholder="고2, 대학교 3학년, 정보처리기사..."
+              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:border-violet-400 focus:bg-white transition-colors"
+            />
+            {/* 빠른 선택 칩 */}
+            <div className="flex gap-1.5 mt-1.5 flex-wrap">
+              {['고1', '고2', '고3', '대학교', '자격증'].map(g => (
+                <button key={g} onClick={() => setHomeGrade(g)}
+                  className={`text-[10px] px-2.5 py-1 rounded-lg border transition-colors ${homeGrade === g ? 'bg-violet-600 text-white border-violet-600' : 'bg-gray-50 text-gray-500 border-gray-200 hover:border-violet-300'}`}>
+                  {g}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 과목/전공 */}
+          <div className="mb-2">
+            <label className="text-[10px] text-gray-400 font-medium mb-1 block">과목 / 전공</label>
+            <input
+              type="text"
+              value={homeSubject}
+              onChange={e => setHomeSubject(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && homeSubject.trim()) document.getElementById('homeUnitInput')?.focus(); }}
+              placeholder="수학, 영어, 자료구조, 데이터베이스..."
+              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:border-violet-400 focus:bg-white transition-colors"
+            />
+          </div>
+
+          {/* 단원 (선택) */}
+          <div className="mb-3">
+            <label className="text-[10px] text-gray-400 font-medium mb-1 block">단원 <span className="text-gray-300">(선택 — 없으면 전범위)</span></label>
+            <input
+              id="homeUnitInput"
+              type="text"
+              value={homeUnit}
+              onChange={e => setHomeUnit(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && homeSubject.trim()) generateFromGoal(); }}
+              placeholder="이차함수, 트리, 관계형 데이터베이스..."
+              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:border-violet-400 focus:bg-white transition-colors"
+            />
+          </div>
+
+          {/* 난이도 + 문제수 */}
+          <div className="flex gap-2 mb-3">
+            <div className="flex-1">
+              <label className="text-[10px] text-gray-400 font-medium mb-1 block">난이도</label>
+              <div className="flex gap-1">
+                {[1,2,3].map(d => (
+                  <button key={d} onClick={() => setDifficulty(d)}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${difficulty === d ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                    {d===1?'하':d===2?'중':'상'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex-1">
+              <label className="text-[10px] text-gray-400 font-medium mb-1 block">문제 수</label>
+              <div className="flex gap-1">
+                {[3,5,10].map(n => (
+                  <button key={n} onClick={() => setCount(n)}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${count === n ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={generateFromGoal}
+            disabled={!homeSubject.trim() || loading}
+            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold text-sm shadow-md shadow-violet-200 disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none active:scale-[0.98] transition-all"
+          >
+            {loading ? <span><span className="inline-block animate-spin mr-1.5">🌸</span>문제 만드는 중...</span> : '🎯 문제 만들기'}
+          </button>
         </div>
 
         {/* 내 학습 맵 */}
