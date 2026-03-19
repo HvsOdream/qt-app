@@ -218,6 +218,12 @@ export default function Home() {
   const [previewExpanded, setPreviewExpanded] = useState<number | null>(null);
   // parsed 화면 키워드 태그
   const [parsedKeywordTag, setParsedKeywordTag] = useState('');
+  // 오답노트
+  const [wrongNoteProblems, setWrongNoteProblems] = useState<(QuizProblem & { wrong_count?: number; last_wrong?: string; student_answer?: string })[]>([]);
+  const [wrongNoteLoading, setWrongNoteLoading] = useState(false);
+  const [wrongNoteSubjects, setWrongNoteSubjects] = useState<Record<string, number>>({});
+  // 프로필 탭
+  const [profileTab, setProfileTab] = useState<'stats' | 'wrongnote'>('stats');
 
   // ─── 초기화 ───
   useEffect(() => {
@@ -572,6 +578,18 @@ export default function Home() {
     finally { setBankLoading(false); }
   };
 
+  // ─── 오답노트 불러오기 ───
+  const loadWrongNote = async () => {
+    setWrongNoteLoading(true);
+    try {
+      const res = await fetch('/api/wrong-answers');
+      const data = await res.json();
+      setWrongNoteProblems(data.problems || []);
+      setWrongNoteSubjects(data.subjects || {});
+    } catch { /* ignore */ }
+    finally { setWrongNoteLoading(false); }
+  };
+
   // ─── 문제은행에서 퀴즈 시작 ───
   const startBankQuiz = (selected: QuizProblem[]) => {
     setProblems(selected);
@@ -673,7 +691,7 @@ export default function Home() {
             { id: 'home' as const, icon: '🏠', label: '홈', action: () => { setMode('home'); setActiveNav('home'); } },
             { id: 'scan' as const, icon: '📷', label: '스캔', action: () => { setMode('scan'); setActiveNav('scan'); } },
             { id: 'quest' as const, icon: '📦', label: '문제은행', action: () => { loadBank(); setMode('bank'); setActiveNav('quest'); } },
-            { id: 'profile' as const, icon: '👤', label: '내 정보', action: () => { setMode('profile'); setActiveNav('profile'); } },
+            { id: 'profile' as const, icon: '👤', label: '내 정보', action: () => { setMode('profile'); setActiveNav('profile'); loadWrongNote(); } },
           ].map(n => (
             <button key={n.id} onClick={n.action} className={`flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl transition-all ${activeNav === n.id ? 'text-violet-600 bg-violet-50' : 'text-gray-400 hover:text-gray-600'}`}>
               <span className="text-lg">{n.icon}</span>
@@ -1741,72 +1759,160 @@ export default function Home() {
   }
 
   // ═══════════════════════════════════════
-  // 프로필 — 통계 + 미션 + 뱃지 통합
+  // 프로필 — 통계 + 오답노트 탭
   // ═══════════════════════════════════════
   if (mode === 'profile') return (
     <div {...swipeProps} className="relative"><div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
       <div className="max-w-xl mx-auto px-4 py-6">
         {/* 프로필 헤더 */}
-        <div className="text-center mb-5">
-          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-violet-600 to-violet-400 flex items-center justify-center text-3xl mx-auto mb-2 border-3 border-yellow-400/50">🧠</div>
-          <h2 className="text-lg font-extrabold text-gray-900">Lv.{game.level} {levelTitle(game.level)}</h2>
-          <XpBar />
+        <div className="text-center mb-4">
+          <div className="w-14 h-14 rounded-full bg-gradient-to-br from-violet-600 to-violet-400 flex items-center justify-center text-2xl mx-auto mb-2">🧠</div>
+          <h2 className="text-base font-extrabold text-gray-900">Lv.{game.level} {levelTitle(game.level)}</h2>
+          <div className="mt-1"><XpBar /></div>
         </div>
 
-        {/* 핵심 통계 4칸 */}
-        <div className="grid grid-cols-4 gap-1.5 mb-4">
-          {[
-            { v: game.totalSolved, l: '푼 문제', c: 'text-gray-900' },
-            { v: game.totalSolved > 0 ? `${Math.round((game.totalCorrect / game.totalSolved) * 100)}%` : '0%', l: '정답률', c: 'text-violet-600' },
-            { v: game.qp, l: 'QP', c: 'text-yellow-600' },
-            { v: `${game.streak}일`, l: '연속', c: 'text-orange-500' },
-          ].map((s, i) => (
-            <div key={i} className="bg-white shadow-sm rounded-xl p-2.5 text-center">
-              <div className={`text-sm font-extrabold ${s.c}`}>{s.v}</div>
-              <div className="text-[10px] text-gray-400">{s.l}</div>
+        {/* 탭 */}
+        <div className="flex bg-gray-100 rounded-xl p-1 mb-4">
+          <button onClick={() => setProfileTab('stats')}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${profileTab === 'stats' ? 'bg-white text-violet-600 shadow-sm font-semibold' : 'text-gray-500'}`}>
+            📊 내 통계
+          </button>
+          <button onClick={() => { setProfileTab('wrongnote'); loadWrongNote(); }}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${profileTab === 'wrongnote' ? 'bg-white text-red-500 shadow-sm font-semibold' : 'text-gray-500'}`}>
+            ❌ 오답노트 {wrongNoteProblems.length > 0 && <span className="ml-1 text-xs bg-red-100 text-red-500 px-1.5 py-0.5 rounded-full">{wrongNoteProblems.length}</span>}
+          </button>
+        </div>
+
+        {/* ── 통계 탭 ── */}
+        {profileTab === 'stats' && (
+          <>
+            {/* 핵심 통계 4칸 */}
+            <div className="grid grid-cols-4 gap-1.5 mb-4">
+              {[
+                { v: game.totalSolved, l: '푼 문제', c: 'text-gray-900' },
+                { v: game.totalSolved > 0 ? `${Math.round((game.totalCorrect / game.totalSolved) * 100)}%` : '0%', l: '정답률', c: 'text-violet-600' },
+                { v: game.qp, l: 'QP', c: 'text-yellow-600' },
+                { v: `${game.streak}일`, l: '연속', c: 'text-orange-500' },
+              ].map((s, i) => (
+                <div key={i} className="bg-white shadow-sm rounded-xl p-2.5 text-center">
+                  <div className={`text-sm font-extrabold ${s.c}`}>{s.v}</div>
+                  <div className="text-[10px] text-gray-400">{s.l}</div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
 
-        {/* 일일 미션 (홈에서 이동) */}
-        <div className="bg-white shadow-sm border border-violet-200 rounded-2xl p-4 mb-4">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-xs font-bold text-violet-600">📋 오늘의 미션</span>
-            <span className="text-xs text-gray-500">{(game.totalSolved >= 3 ? 1 : 0) + (game.totalSolved >= 1 ? 1 : 0)}/3</span>
-          </div>
-          <div className="space-y-1.5 text-xs">
-            <div className="flex justify-between"><span className={game.totalSolved >= 3 ? 'text-gray-400 line-through' : 'text-gray-700'}>{game.totalSolved >= 3 ? '✅' : '⬜'} 문제 3개 풀기</span><span className="text-violet-600">+30 QP</span></div>
-            <div className="flex justify-between"><span className="text-gray-700">⬜ 새 시험지 스캔</span><span className="text-violet-600">+50 QP</span></div>
-            <div className="flex justify-between"><span className="text-gray-700">⬜ 오답 특훈 1회</span><span className="text-violet-600">+40 QP</span></div>
-          </div>
-        </div>
+            {/* 일일 미션 */}
+            <div className="bg-white shadow-sm border border-violet-100 rounded-2xl p-4 mb-4">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-bold text-violet-600">📋 오늘의 미션</span>
+                <span className="text-xs text-gray-400">{(game.totalSolved >= 3 ? 1 : 0) + (game.totalSolved >= 1 ? 1 : 0) + (wrongNoteProblems.length > 0 ? 0 : 0)}/3</span>
+              </div>
+              <div className="space-y-1.5 text-xs">
+                <div className="flex justify-between"><span className={game.totalSolved >= 1 ? 'text-gray-400 line-through' : 'text-gray-700'}>{game.totalSolved >= 1 ? '✅' : '⬜'} 문제 1개 풀기</span><span className="text-violet-500">+10 QP</span></div>
+                <div className="flex justify-between"><span className={game.totalSolved >= 3 ? 'text-gray-400 line-through' : 'text-gray-700'}>{game.totalSolved >= 3 ? '✅' : '⬜'} 문제 3개 풀기</span><span className="text-violet-500">+30 QP</span></div>
+                <div className="flex justify-between"><span className="text-gray-700">⬜ 오답 특훈 1회</span><span className="text-violet-500">+40 QP</span></div>
+              </div>
+            </div>
 
-        {/* 카테고리 */}
-        {game.categories.length > 0 && (
-          <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-4 mb-4">
-            <div className="text-xs font-bold text-gray-900 mb-2">🏷 탐험한 영역</div>
-            <div className="flex gap-1.5 flex-wrap">{game.categories.map(c => <span key={c} className="px-2.5 py-1 bg-violet-100 text-violet-600 text-xs rounded-lg">{c}</span>)}</div>
-          </div>
+            {/* 탐험한 과목 */}
+            {game.categories.length > 0 && (
+              <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-4 mb-4">
+                <div className="text-xs font-bold text-gray-900 mb-2">🏷 탐험한 과목</div>
+                <div className="flex gap-1.5 flex-wrap">{game.categories.map(c => <span key={c} className="px-2.5 py-1 bg-violet-100 text-violet-600 text-xs rounded-lg">{c}</span>)}</div>
+              </div>
+            )}
+
+            {/* 뱃지 */}
+            <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-4">
+              <div className="text-xs font-bold text-gray-900 mb-2">🏅 뱃지 (준비 중)</div>
+              <div className="flex gap-2">
+                {[1,2,3,4].map(i => <div key={i} className="w-10 h-10 rounded-xl bg-gray-100 border border-dashed border-gray-200 flex items-center justify-center text-sm">🔒</div>)}
+              </div>
+              <p className="text-[10px] text-gray-400 mt-2">과목별 정답률 80% + 20문제 이상 풀면 해금</p>
+            </div>
+          </>
         )}
 
-        {/* 뱃지 */}
-        <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-4 mb-4">
-          <div className="text-xs font-bold text-gray-900 mb-2">🏅 뱃지</div>
-          <div className="flex gap-2">
-            {[1,2,3,4].map(i => <div key={i} className="w-10 h-10 rounded-xl bg-gray-100 border border-dashed border-gray-200 flex items-center justify-center text-sm text-gray-600">🔒</div>)}
-          </div>
-          <p className="text-xs text-gray-400 mt-2">과목별 정답률 80% + 20문제 이상 풀면 뱃지 획득!</p>
-        </div>
+        {/* ── 오답노트 탭 ── */}
+        {profileTab === 'wrongnote' && (
+          <>
+            {wrongNoteLoading ? (
+              <div className="text-center py-12">
+                <span className="inline-block animate-spin text-2xl">⏳</span>
+                <p className="text-xs text-gray-400 mt-2">오답 불러오는 중...</p>
+              </div>
+            ) : wrongNoteProblems.length === 0 ? (
+              <div className="text-center py-16">
+                <div className="text-5xl mb-3 opacity-30">🎉</div>
+                <p className="text-sm font-bold text-gray-500 mb-1">오답이 없어요!</p>
+                <p className="text-xs text-gray-400">문제를 풀면 틀린 것들이 여기 쌓여요</p>
+              </div>
+            ) : (
+              <>
+                {/* 요약 + 전체 특훈 */}
+                <div className="bg-red-50 border border-red-100 rounded-2xl p-4 mb-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-extrabold text-red-600">❌ {wrongNoteProblems.length}문제 틀렸어요</div>
+                      <div className="text-xs text-red-400 mt-0.5">
+                        {Object.entries(wrongNoteSubjects).slice(0, 3).map(([s, n]) => `${s} ${n}개`).join(' · ')}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => startBankQuiz(wrongNoteProblems.slice(0, 10) as QuizProblem[])}
+                      className="px-4 py-2 bg-red-500 text-white text-xs font-bold rounded-xl active:scale-95 transition-transform">
+                      🔥 전체 특훈
+                    </button>
+                  </div>
+                </div>
 
-        {/* 해금 프리뷰 */}
-        <div className="bg-white shadow-sm border border-gray-100 rounded-2xl p-4 opacity-50">
-          <div className="text-xs font-bold text-gray-900 mb-2">🔒 해금 대기 중</div>
-          <div className="space-y-1 text-xs text-gray-500">
-            <div>📊 약점 분석 — {Math.min(game.totalSolved, 10)}/10 문제 풀면 해금</div>
-            <div>👥 문제 추천 — {Math.min(game.totalSolved, 30)}/30 문제 달성 시</div>
-            <div>⚔️ 랭킹 챌린지 — Lv.{game.level}/5 달성 시</div>
-          </div>
-        </div>
+                {/* 과목별 요약 칩 */}
+                {Object.keys(wrongNoteSubjects).length > 1 && (
+                  <div className="flex gap-2 mb-4 flex-wrap">
+                    {Object.entries(wrongNoteSubjects).map(([subject, cnt]) => (
+                      <div key={subject} className="flex items-center gap-1 bg-white border border-red-100 rounded-xl px-3 py-1.5">
+                        <span className="text-xs font-bold text-gray-700">{subject}</span>
+                        <span className="text-xs text-red-400">{cnt}개</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* 오답 목록 */}
+                <div className="space-y-2">
+                  {wrongNoteProblems.map((p, idx) => (
+                    <div key={idx} className="bg-white shadow-sm rounded-2xl border border-red-50 p-3.5">
+                      <p className="text-xs text-gray-800 leading-relaxed line-clamp-2 mb-2">
+                        <MathText text={p.question_text} />
+                      </p>
+                      {/* 내 답 vs 정답 */}
+                      {p.student_answer && (
+                        <div className="flex gap-2 mb-2">
+                          <span className="text-[10px] bg-red-50 text-red-400 px-2 py-0.5 rounded-lg">내 답: {p.student_answer}</span>
+                          <span className="text-[10px] bg-green-50 text-green-500 px-2 py-0.5 rounded-lg">정답: {p.correct_answer}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between">
+                        <div className="flex gap-1 flex-wrap">
+                          {p.subject && <span className="px-1.5 py-0.5 bg-gray-100 text-gray-400 text-[10px] rounded">{p.subject}</span>}
+                          {p.topic && <span className="px-1.5 py-0.5 bg-gray-100 text-gray-400 text-[10px] rounded">{p.topic}</span>}
+                          {(p.wrong_count ?? 0) > 1 && (
+                            <span className="px-1.5 py-0.5 bg-red-50 text-red-400 text-[10px] rounded">{p.wrong_count}번 틀림</span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => startBankQuiz([p as QuizProblem])}
+                          className="ml-2 px-3 py-1.5 rounded-xl bg-red-500 text-white text-xs font-bold active:scale-95 transition-transform flex-shrink-0">
+                          다시 풀기
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </>
+        )}
       </div>
       <BottomNav />
       <DotIndicator />
