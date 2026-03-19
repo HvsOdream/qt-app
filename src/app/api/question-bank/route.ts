@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
     const skipSummary = searchParams.get('skipSummary') === 'true';
+    const deviceId = request.headers.get('x-device-id');
 
     const supabase = getServiceClient();
 
@@ -48,6 +49,8 @@ export async function GET(request: NextRequest) {
       .select('*', { count: 'exact' })
       .order('created_at', { ascending: false });
 
+    // device_id가 있으면 해당 사용자 데이터만 조회
+    if (deviceId) query = query.eq('device_id', deviceId);
     if (subject) query = query.eq('subject', subject);
     if (topic) query = query.eq('topic', topic);
     if (difficulty) query = query.eq('difficulty', parseInt(difficulty));

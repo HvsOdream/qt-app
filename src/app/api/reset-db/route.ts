@@ -1,21 +1,21 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getServiceClient } from '@/lib/supabase';
 
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
   try {
+    const deviceId = request.headers.get('x-device-id') || 'unknown';
     const supabase = getServiceClient();
 
-    // quiz_results 전체 삭제
+    // 해당 device_id의 데이터만 삭제 (다른 사용자 데이터 보호)
     const { error: e1 } = await supabase
       .from('quiz_results')
       .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000'); // 전체 삭제 트릭
+      .eq('device_id', deviceId);
 
-    // question_bank 전체 삭제
     const { error: e2 } = await supabase
       .from('question_bank')
       .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000');
+      .eq('device_id', deviceId);
 
     if (e1 || e2) {
       console.error('reset-db 오류:', e1, e2);

@@ -1,15 +1,17 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getServiceClient } from '@/lib/supabase';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const deviceId = request.headers.get('x-device-id') || 'unknown';
     const supabase = getServiceClient();
 
-    // 오답 목록 조회 (최신순, 50개)
+    // 오답 목록 조회 (최신순, 100개) — device_id 필터
     const { data: wrongAnswers, error } = await supabase
       .from('quiz_results')
       .select('question_text, choices, correct_answer, subject, topic, keywords, question_bank_id, created_at, student_answer')
       .eq('is_correct', false)
+      .eq('device_id', deviceId)
       .order('created_at', { ascending: false })
       .limit(100);
 
@@ -41,11 +43,12 @@ export async function GET() {
       bankData?.forEach(p => { bankMap[p.id] = p; });
     }
 
-    // 오답 이력 카운트 (문제별 몇 번 틀렸는지)
+    // 오답 이력 카운트 (문제별 몇 번 틀렸는지) — device_id 필터
     const { data: countData } = await supabase
       .from('quiz_results')
       .select('question_text')
-      .eq('is_correct', false);
+      .eq('is_correct', false)
+      .eq('device_id', deviceId);
 
     const wrongCountMap: Record<string, number> = {};
     countData?.forEach(r => {

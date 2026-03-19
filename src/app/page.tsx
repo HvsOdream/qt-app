@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { signOut } from '@/lib/supabase';
+import { deviceHeaders } from '@/lib/device';
 
 // ─── 타입 ───
 interface ParsedProblem {
@@ -125,25 +126,46 @@ function isShortAnswerCorrect(student: string, correct: string): boolean {
 }
 
 // ─── 수학 텍스트 렌더링 ───
-// 수식 내 부등호를 유니코드 수학 기호로, 변수를 이탤릭으로 표시
+// 수학 콘텐츠 여부를 판단한 뒤, 수학이면 변수 이탤릭 + 부등호 유니코드 처리
+function hasMathContent(text: string): boolean {
+  // 수식 신호: 연산자, 수식 기호, 분수 형태, 지수 등
+  const mathSignals = [
+    /[+\-×÷=≥≤≠∞π√∑∫∂]/, // 수학 연산자/기호
+    /\d+\s*[+\-×÷=]\s*\d+/, // 숫자 연산 (예: 3+5, 2×4)
+    /[a-zA-Z]\s*[+\-×÷=]\s*[a-zA-Z\d]/, // 변수 연산 (예: x+1, y=2)
+    /\^\d/, // 지수 (예: x^2)
+    /\d+\/\d+/, // 분수 (예: 1/2)
+    /f\s*\(/, // 함수 표기 (예: f(x))
+    /[xy]\s*=\s*\d/, // 변수 = 숫자
+  ];
+  return mathSignals.some(re => re.test(text));
+}
+
 function MathText({ text, className = '' }: { text: string; className?: string }) {
+  // 영어 문장 여부 판단: 2개 이상의 연속 영단어가 있으면 영어 텍스트
+  const isEnglishProse = /[a-zA-Z]{2,}\s+[a-zA-Z]{2,}/.test(text);
+  // 수학 내용 여부
+  const isMath = !isEnglishProse && hasMathContent(text);
+
+  // 영어 문장이거나 수학 내용 없으면 → 그냥 출력 (포맷 건드리지 않음)
+  if (!isMath) {
+    return <span className={className}>{text}</span>;
+  }
+
+  // 수학 텍스트 처리
   // 1) ASCII 부등호 → 유니코드 수학 기호
-  let processed = text
-    .replace(/(<=[^>])/g, (m) => m) // 보호: HTML 아닌지 체크
+  const processed = text
     .replace(/>=|≥/g, '≥')
     .replace(/<=|≤/g, '≤')
     .replace(/(?<![<\w])>(?![>=\w])/g, '＞')
     .replace(/(?<![<\w])<(?![<=\w])/g, '＜');
 
-  // 2) 수식 패턴 감지: 숫자, 연산자, 변수가 포함된 부분을 이탤릭 수학체로 감싸기
-  // 단독 변수(x, y, a, b, k 등)를 이탤릭으로
+  // 2) 단독 알파벳 변수 이탤릭 처리
   const parts = processed.split(/([a-zA-Z](?=[^a-zA-Z가-힣]|$))/g);
-
   const elements: React.ReactNode[] = [];
   let i = 0;
   while (i < parts.length) {
     const part = parts[i];
-    // 단독 알파벳 변수 (1글자, 뒤에 한글이나 영문 단어가 아닌 경우)
     if (part && /^[a-zA-Z]$/.test(part)) {
       elements.push(<span key={i} style={{ fontStyle: 'italic', fontFamily: 'Georgia, "Times New Roman", serif' }}>{part}</span>);
     } else if (part) {
@@ -169,6 +191,8 @@ export default function Home() {
   const [homeSubject, setHomeSubject] = useState('');
   const [homeUnit, setHomeUnit] = useState('');
   const [showGoalModal, setShowGoalModal] = useState(false);  // 바텀시트
+  const [pendingKeyword, setPendingKeyword] = useState<string | null>(null); // 학습맵 확인 모달
+  const [problemSource, setProblemSource] = useState<'ai' | 'scan' | 'bank'>('ai'); // 문제 출처
   const [activeNav, setActiveNav] = useState<'home' | 'scan' | 'quest' | 'profile'>('home');
   // 꽃 피는 로딩
   const [bloomStage, setBloomStage] = useState(0);
@@ -381,7 +405,7 @@ export default function Home() {
         selectedParsedIdx.map(idx => {
           const original = parseResult.problems[idx];
           return fetch('/api/generate-similar', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: deviceHeaders(),
             body: JSON.stringify({ originalProblem: original, count: Math.max(1, Math.floor(count / selectedParsedIdx.length)), difficulty }),
           }).then(async r => {
             const d = await r.json();
@@ -395,7 +419,7 @@ export default function Home() {
         setProblems(allProblems.slice(0, count));
         setCurrentIndex(0); setSelectedAnswer(null); setShowExplanation(false);
         setScore({ correct: 0, total: 0 }); setQuizAnswers([]); setConsecutiveCorrect(0);
-        setPreviewExpanded(null);
+        setPreviewExpanded(null); setProblemSource('scan');
         stopBloomTimer();
         setMode('preview');
       } else {
@@ -416,7 +440,7 @@ export default function Home() {
     try {
       // 문제은행에서 해당 키워드 문제 검색
       const params = new URLSearchParams({ keyword: kw.trim(), limit: String(count) });
-      const res = await fetch(`/api/question-bank?${params.toString()}`);
+      const res = await fetch(`/api/question-bank?${params.toString()}`, { headers: deviceHeaders() });
       const data = await res.json();
       if (data.problems && data.problems.length > 0) {
         setProblems(data.problems.slice(0, count));
@@ -457,7 +481,7 @@ export default function Home() {
 
     try {
       fetch('/api/save-result', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: deviceHeaders(),
         body: JSON.stringify({ question_text: problem.question_text, choices: problem.choices, correct_answer: problem.correct_answer, student_answer: answer, is_correct: isCorrect, subject: problem.subject || null, topic: problem.topic || null, keywords: problem.keywords || [], question_bank_id: problem.id || null }),
       });
     } catch { /* ignore */ }
@@ -533,7 +557,7 @@ export default function Home() {
     });
     try {
       const res = await fetch('/api/generate-by-topic', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: deviceHeaders(),
         body: JSON.stringify({
           grade: homeGrade.trim(),
           subject: homeSubject.trim(),
@@ -548,7 +572,7 @@ export default function Home() {
         setProblems(allProblems.slice(0, count));
         setCurrentIndex(0); setSelectedAnswer(null); setShowExplanation(false);
         setScore({ correct: 0, total: 0 }); setQuizAnswers([]); setConsecutiveCorrect(0);
-        setPreviewExpanded(null);
+        setPreviewExpanded(null); setProblemSource('ai');
         stopBloomTimer();
         setMode('preview');
       } else {
@@ -573,7 +597,7 @@ export default function Home() {
       // bankCategories가 이미 로드된 경우 summary 쿼리 스킵 (성능 최적화)
       const hasCats = Object.keys(bankCategories).length > 0;
       if (hasCats && !forceRefreshCategories) params.set('skipSummary', 'true');
-      const res = await fetch(`/api/question-bank?${params.toString()}`);
+      const res = await fetch(`/api/question-bank?${params.toString()}`, { headers: deviceHeaders() });
       const data = await res.json();
       setBankProblems(data.problems || []);
       if (data.categories) setBankCategories(data.categories);
@@ -586,7 +610,7 @@ export default function Home() {
   const loadWrongNote = async () => {
     setWrongNoteLoading(true);
     try {
-      const res = await fetch('/api/wrong-answers');
+      const res = await fetch('/api/wrong-answers', { headers: deviceHeaders() });
       const data = await res.json();
       setWrongNoteProblems(data.problems || []);
       setWrongNoteSubjects(data.subjects || {});
@@ -997,35 +1021,11 @@ export default function Home() {
                 {game.userKeywords.map(kw => (
                   <button
                     key={kw}
-                    onClick={() => {
-                      // 키워드를 과목/단원으로 설정하고 바로 문제 생성
-                      setHomeSubject(game.studySubject || kw);
-                      setHomeUnit(kw);
-                      setHomeGrade(game.studyGrade || '');
-                      setShowGoalModal(false);
-                      // generateFromGoal은 state 반영 후 실행해야 해서 setTimeout
-                      setTimeout(() => {
-                        const topic = kw;
-                        setLoading(true); startBloomTimer(15);
-                        fetch('/api/generate-by-topic', {
-                          method: 'POST', headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ grade: game.studyGrade || '', subject: game.studySubject || kw, topic, difficulty, count }),
-                        }).then(r => r.json()).then(data => {
-                          const all: QuizProblem[] = data.problems || [];
-                          if (all.length > 0) {
-                            setProblems(all); setCurrentIndex(0); setSelectedAnswer(null);
-                            setShowExplanation(false); setScore({ correct: 0, total: 0 });
-                            setQuizAnswers([]); setConsecutiveCorrect(0); setPreviewExpanded(null);
-                            stopBloomTimer(); setMode('preview');
-                          } else { stopBloomTimer(); alert('문제 생성에 실패했습니다.'); }
-                        }).catch(() => { stopBloomTimer(); alert('오류'); })
-                          .finally(() => setLoading(false));
-                      }, 0);
-                    }}
+                    onClick={() => setPendingKeyword(kw)}
                     className="bg-violet-50 border border-violet-200 rounded-xl px-3 py-2 text-left hover:bg-violet-100 active:scale-95 transition-all"
                   >
                     <div className="text-xs font-bold text-violet-700">{kw}</div>
-                    <div className="text-[10px] text-violet-400 mt-0.5">✨ 문제 만들기</div>
+                    <div className="text-[10px] text-violet-400 mt-0.5">탭해서 생성</div>
                   </button>
                 ))}
               </div>
@@ -1131,6 +1131,75 @@ export default function Home() {
             >
               🎯 문제 만들기
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 학습맵 키워드 → 문제 생성 확인 바텀시트 */}
+      {pendingKeyword && (
+        <div className="fixed inset-0 z-[160] flex items-end" onClick={() => setPendingKeyword(null)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div className="relative w-full max-w-xl mx-auto bg-white rounded-t-3xl p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-5" />
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-2xl bg-violet-100 flex items-center justify-center text-lg flex-shrink-0">✨</div>
+              <div>
+                <div className="text-sm font-bold text-gray-900">문제를 만들까요?</div>
+                <div className="text-xs text-gray-500 mt-0.5">
+                  <span className="font-medium text-violet-600">{pendingKeyword}</span> 키워드로 AI 문제를 생성합니다
+                </div>
+              </div>
+            </div>
+            {/* 설정 요약 */}
+            <div className="bg-gray-50 rounded-xl p-3 mb-4 space-y-1.5">
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-500">학년/상황</span>
+                <span className="font-medium text-gray-700">{game.studyGrade || '설정 안됨'}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-500">과목</span>
+                <span className="font-medium text-gray-700">{game.studySubject || pendingKeyword}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-500">단원/주제</span>
+                <span className="font-medium text-violet-600">{pendingKeyword}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-500">난이도 / 문제 수</span>
+                <span className="font-medium text-gray-700">{['','하','중','상'][difficulty]} / {count}문제</span>
+              </div>
+            </div>
+            <p className="text-[10px] text-amber-600 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 mb-4">
+              ⚠️ AI가 생성하는 문제입니다. 교과서 내용과 다를 수 있으니 참고용으로 활용하세요.
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => setPendingKeyword(null)}
+                className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-500 font-medium text-sm active:scale-95 transition-transform">
+                취소
+              </button>
+              <button
+                onClick={() => {
+                  const kw = pendingKeyword;
+                  setPendingKeyword(null);
+                  setLoading(true); startBloomTimer(15);
+                  fetch('/api/generate-by-topic', {
+                    method: 'POST', headers: deviceHeaders(),
+                    body: JSON.stringify({ grade: game.studyGrade || '', subject: game.studySubject || kw, topic: kw, difficulty, count }),
+                  }).then(r => r.json()).then(data => {
+                    const all: QuizProblem[] = data.problems || [];
+                    if (all.length > 0) {
+                      setProblems(all); setCurrentIndex(0); setSelectedAnswer(null);
+                      setShowExplanation(false); setScore({ correct: 0, total: 0 });
+                      setQuizAnswers([]); setConsecutiveCorrect(0); setPreviewExpanded(null);
+                      setProblemSource('ai'); stopBloomTimer(); setMode('preview');
+                    } else { stopBloomTimer(); alert('문제 생성에 실패했습니다.'); }
+                  }).catch(() => { stopBloomTimer(); alert('오류가 발생했습니다.'); })
+                    .finally(() => setLoading(false));
+                }}
+                className="flex-2 flex-1 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold text-sm active:scale-95 transition-transform shadow-lg shadow-violet-300/30">
+                🎯 문제 만들기
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1391,6 +1460,19 @@ export default function Home() {
               지금 풀기 ▶
             </button>
           </div>
+
+          {/* AI 생성 경고 배너 */}
+          {problemSource === 'ai' && (
+            <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-3 mb-4">
+              <span className="text-base flex-shrink-0 mt-0.5">⚠️</span>
+              <div>
+                <div className="text-xs font-bold text-amber-700 mb-0.5">AI 생성 문제 — 교과서 내용과 다를 수 있어요</div>
+                <div className="text-[10px] text-amber-600 leading-relaxed">
+                  Claude AI가 입력한 키워드/단원을 기반으로 만든 문제입니다. 실제 교과서·출제 기준과 다를 수 있으니 학습 참고용으로 활용하세요. 오류가 있으면 다시 생성해 보세요.
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* 문제 목록 */}
           <div className="space-y-2 mb-5">
@@ -1965,7 +2047,7 @@ export default function Home() {
             onClick={async () => {
               if (!confirm('⚠️ 모든 학습 데이터(문제은행 + 퀴즈 기록)를 삭제합니다.\n정말 초기화하시겠어요?')) return;
               try {
-                const res = await fetch('/api/reset-db', { method: 'DELETE' });
+                const res = await fetch('/api/reset-db', { method: 'DELETE', headers: deviceHeaders() });
                 const data = await res.json();
                 if (data.ok) {
                   // 로컬 게임 상태도 리셋

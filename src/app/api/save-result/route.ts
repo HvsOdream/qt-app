@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
       question_bank_id,
     } = body;
 
+    const deviceId = request.headers.get('x-device-id') || 'unknown';
     const supabase = getServiceClient();
 
     await supabase.from('quiz_results').insert({
@@ -30,6 +31,7 @@ export async function POST(request: NextRequest) {
       keywords: keywords || [],
       wrong_answer_id: wrong_answer_id || null,
       question_bank_id: question_bank_id || null,
+      device_id: deviceId,
     });
 
     // question_bank 통계 업데이트
