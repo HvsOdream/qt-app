@@ -1214,50 +1214,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* ── 카테고리 확인 모달 (연습 시작 전) ── */}
-      {showCategoryConfirm && (
-        <div className="fixed inset-0 z-[160] flex items-end" onClick={() => setShowCategoryConfirm(false)}>
-          <div className="w-full max-w-xl mx-auto bg-white rounded-t-3xl p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-5" />
-            <h3 className="text-base font-extrabold text-gray-900 mb-1">📚 단원 확인</h3>
-            <p className="text-xs text-gray-500 mb-4">AI가 감지한 단원이에요. 수정하면 학습 맵에 정확히 반영돼요.</p>
-            <div className="space-y-3 mb-5">
-              <div>
-                <label className="text-xs font-semibold text-gray-600 mb-1 block">과목</label>
-                <input
-                  value={editSubject}
-                  onChange={e => setEditSubject(e.target.value)}
-                  placeholder="예: 수학, 영어, 과학"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-violet-400"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-600 mb-1 block">단원 / 주제</label>
-                <input
-                  value={editTopic}
-                  onChange={e => setEditTopic(e.target.value)}
-                  placeholder="예: 중2 일차부등식, 1단원 만남과 관계"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-violet-400"
-                />
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => setShowCategoryConfirm(false)}
-                className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-semibold text-sm">
-                취소
-              </button>
-              <button
-                onClick={() => {
-                  setShowCategoryConfirm(false);
-                  generateSimilar(editSubject || undefined, editTopic || undefined);
-                }}
-                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold text-sm active:scale-95 transition-transform shadow-lg shadow-violet-300/30">
-                ⚡ 이 단원으로 생성
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div></div>
   );
 
@@ -1484,6 +1440,51 @@ export default function Home() {
         </button>
       </div>
       <BottomNav />
+
+      {/* ── 카테고리 확인 모달 (연습 시작 전) ── */}
+      {showCategoryConfirm && (
+        <div className="fixed inset-0 z-[160] flex items-end" onClick={() => setShowCategoryConfirm(false)}>
+          <div className="w-full max-w-xl mx-auto bg-white rounded-t-3xl p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-5" />
+            <h3 className="text-base font-extrabold text-gray-900 mb-1">📚 단원 확인</h3>
+            <p className="text-xs text-gray-500 mb-4">AI가 감지한 단원이에요. 수정하면 학습 맵에 정확히 반영돼요.</p>
+            <div className="space-y-3 mb-5">
+              <div>
+                <label className="text-xs font-semibold text-gray-600 mb-1 block">과목</label>
+                <input
+                  value={editSubject}
+                  onChange={e => setEditSubject(e.target.value)}
+                  placeholder="예: 수학, 영어, 과학"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-violet-400"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-600 mb-1 block">단원 / 주제</label>
+                <input
+                  value={editTopic}
+                  onChange={e => setEditTopic(e.target.value)}
+                  placeholder="예: 중2 일차부등식, 1단원 만남과 관계"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-violet-400"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setShowCategoryConfirm(false)}
+                className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-semibold text-sm">
+                취소
+              </button>
+              <button
+                onClick={() => {
+                  setShowCategoryConfirm(false);
+                  generateSimilar(editSubject || undefined, editTopic || undefined);
+                }}
+                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold text-sm active:scale-95 transition-transform shadow-lg shadow-violet-300/30">
+                ⚡ 이 단원으로 생성
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 
