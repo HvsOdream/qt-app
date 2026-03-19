@@ -1,11 +1,11 @@
 {
-  "name": "QT 큐티 — AI 오답 튜터",
-  "short_name": "QT 큐티",
-  "description": "틀린 문제 찍으면 AI가 유사 문제를 만들어줘요",
+  "name": "BloomLens — AI 학습 맵",
+  "short_name": "BloomLens",
+  "description": "센서인은 BloomLens로 성장한다. 시험지를 찍으면 AI가 학습 맵을 키워줘요.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f5f3ff",
-  "theme_color": "#7c3aed",
+  "background_color": "#0a2265",
+  "theme_color": "#0a2265",
   "orientation": "portrait",
   "icons": [
     {

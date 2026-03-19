@@ -2,18 +2,18 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "QT 큐티 — AI 오답 튜터",
-  description: "틀린 문제 찍으면 유사 문제 생성 + 해설 + 오답 분석",
+  title: "BloomLens — AI 학습 맵",
+  description: "센서인은 BloomLens로 성장한다. 시험지를 찍으면 AI가 학습 맵을 키워줘요.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
-    title: "QT 큐티",
+    statusBarStyle: "black-translucent",
+    title: "BloomLens",
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#7c3aed",
+  themeColor: "#0a2265",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,

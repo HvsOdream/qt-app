@@ -561,34 +561,20 @@ export default function Home() {
     swipeDelta.current = 0;
   };
 
-  // 스와이프 래퍼 + 점 인디케이터
-  const SwipeWrap = ({ children }: { children: React.ReactNode }) => {
-    const currentIdx = NAV_SCREENS.indexOf(mode as NavScreen);
-    return (
-      <div
-        onTouchStart={handleSwipeStart}
-        onTouchMove={handleSwipeMove}
-        onTouchEnd={handleSwipeEnd}
-        className="relative"
-      >
-        {children}
-        {currentIdx !== -1 && (
-          <div className="fixed bottom-[76px] left-0 right-0 flex justify-center gap-1.5 z-40 pointer-events-none">
-            {NAV_SCREENS.map((_, i) => (
-              <div
-                key={i}
-                className={`rounded-full transition-all duration-200 ${
-                  i === currentIdx
-                    ? 'w-4 h-1.5 bg-violet-500'
-                    : 'w-1.5 h-1.5 bg-gray-300'
-                }`}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    );
+  // 스와이프 래퍼 props (인라인으로 각 화면에 직접 적용 — 컴포넌트 내부 정의 시 리마운트로 키보드 닫힘 버그 발생)
+  const swipeProps = {
+    onTouchStart: handleSwipeStart,
+    onTouchMove: handleSwipeMove,
+    onTouchEnd: handleSwipeEnd,
   };
+  const currentNavIdx = NAV_SCREENS.indexOf(mode as NavScreen);
+  const DotIndicator = () => currentNavIdx !== -1 ? (
+    <div className="fixed bottom-[76px] left-0 right-0 flex justify-center gap-1.5 z-40 pointer-events-none">
+      {NAV_SCREENS.map((_, i) => (
+        <div key={i} className={`rounded-full transition-all duration-200 ${i === currentNavIdx ? 'w-4 h-1.5 bg-violet-500' : 'w-1.5 h-1.5 bg-gray-300'}`} />
+      ))}
+    </div>
+  ) : null;
 
   // ─── 하단 내비 ───
   const BottomNav = () => (
@@ -775,7 +761,7 @@ export default function Home() {
   // 홈 허브 — 맵 + 스캔 중심
   // ═══════════════════════════════════════
   if (mode === 'home') return (
-    <SwipeWrap><div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
+    <div {...swipeProps} className="relative"><div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
       <div className="max-w-xl mx-auto px-4 pt-6">
         {/* 헤더 — BloomLens + 키워드 맵 카운트 */}
         <div className="flex items-center justify-between mb-5">
@@ -811,7 +797,7 @@ export default function Home() {
             <div className="relative z-10">
               {expandedKeywords.length === 0 && !expandingKeywords ? (
                 <div>
-                  <p className="text-xs font-semibold text-gray-500 mb-2 text-center">🌱 첫 번째 키워드를 심어보세요</p>
+                  <p className="text-xs font-semibold text-gray-500 mb-2 text-center">첫번째 학습 키워드를 심어보세요.</p>
                   <div className="flex gap-2">
                     <input
                       type="text"
@@ -904,14 +890,15 @@ export default function Home() {
       </div>
       <BottomNav />
       <LevelUpModal />
-    </div></SwipeWrap>
+      <DotIndicator />
+    </div></div>
   );
 
   // ═══════════════════════════════════════
   // 스캔 화면 (촬영 전 안내 포함)
   // ═══════════════════════════════════════
   if (mode === 'scan') return (
-    <SwipeWrap><div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
+    <div {...swipeProps} className="relative"><div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
       <div className="max-w-xl mx-auto px-4 py-6">
         <div className="text-center mb-5">
           <h1 className="text-xl font-bold text-gray-900">📷 시험지 스캔</h1>
@@ -1035,7 +1022,8 @@ export default function Home() {
         )}
       </div>
       <BottomNav />
-    </div></SwipeWrap>
+      <DotIndicator />
+    </div></div>
   );
 
   // ═══════════════════════════════════════
@@ -1413,7 +1401,7 @@ export default function Home() {
     const totalBankCount = Object.values(bankCategories).reduce((acc, topics) => acc + Object.values(topics).reduce((a, b) => a + b, 0), 0);
 
     return (
-    <SwipeWrap><div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
+    <div {...swipeProps} className="relative"><div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
       <div className="max-w-xl mx-auto px-4 py-6">
         <div className="text-center mb-5">
           <h1 className="text-xl font-bold text-gray-900">📦 문제은행</h1>
@@ -1500,7 +1488,8 @@ export default function Home() {
         )}
       </div>
       <BottomNav />
-    </div></SwipeWrap>
+      <DotIndicator />
+    </div></div>
     );
   }
 
@@ -1508,7 +1497,7 @@ export default function Home() {
   // 프로필 — 통계 + 미션 + 뱃지 통합
   // ═══════════════════════════════════════
   if (mode === 'profile') return (
-    <SwipeWrap><div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
+    <div {...swipeProps} className="relative"><div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
       <div className="max-w-xl mx-auto px-4 py-6">
         {/* 프로필 헤더 */}
         <div className="text-center mb-5">
@@ -1573,7 +1562,8 @@ export default function Home() {
         </div>
       </div>
       <BottomNav />
-    </div></SwipeWrap>
+      <DotIndicator />
+    </div></div>
   );
 
   return null;
