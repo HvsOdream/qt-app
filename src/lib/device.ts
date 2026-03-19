@@ -1,7 +1,5 @@
-// ─── 디바이스 ID 관리 ───
-// 최초 접속 시 UUID를 생성해 localStorage에 저장하고, 이후 모든 API 요청에 헤더로 실어 보낸다.
-// DB에서 device_id 컬럼으로 사용자 데이터를 격리하는 MVP용 방법.
-
+// ─── 디바이스/유저 ID 관리 ───
+// 로그인된 경우 user.id를 우선 사용, 미로그인 시 임시 UUID
 const DEVICE_ID_KEY = 'qt_device_id';
 
 export function getDeviceId(): string {
@@ -14,7 +12,19 @@ export function getDeviceId(): string {
   return id;
 }
 
-/** fetch 공통 헤더에 device_id를 포함한 Headers 객체를 반환 */
+/** 로그인 성공 시 user.id로 device_id를 교체 */
+export function setDeviceIdFromUser(userId: string): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(DEVICE_ID_KEY, userId);
+}
+
+/** 로그아웃 시 device_id 초기화 */
+export function clearDeviceId(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(DEVICE_ID_KEY);
+}
+
+/** fetch 공통 헤더 */
 export function deviceHeaders(extra?: Record<string, string>): Record<string, string> {
   return {
     'Content-Type': 'application/json',
