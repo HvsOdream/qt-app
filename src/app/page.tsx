@@ -211,7 +211,10 @@ export default function Home() {
   const [bankTotal, setBankTotal] = useState(0);
   const [bankFilter, setBankFilter] = useState<{ subject?: string; topic?: string; keyword?: string }>({});
   const [bankLoading, setBankLoading] = useState(false);
+  const [bankPlayCount, setBankPlayCount] = useState(5);
   const [previewExpanded, setPreviewExpanded] = useState<number | null>(null);
+  // parsed 화면 키워드 태그
+  const [parsedKeywordTag, setParsedKeywordTag] = useState('');
 
   // ─── 초기화 ───
   useEffect(() => {
@@ -593,15 +596,22 @@ export default function Home() {
   const handleSwipeEnd = () => {
     if (swipeStartX.current === null) return;
     const threshold = 80;
-    const currentIdx = NAV_SCREENS.indexOf(mode as NavScreen);
+    // 문제은행 하위 카테고리에서는 스와이프 비활성화
+    if ((mode === 'bank' || mode === 'quest') && bankFilter.subject) {
+      swipeStartX.current = null;
+      swipeStartY.current = null;
+      swipeDelta.current = 0;
+      return;
+    }
+    // bank 모드는 quest 위치(인덱스 2)로 처리
+    const effectiveMode = mode === 'bank' ? 'quest' : mode;
+    const currentIdx = NAV_SCREENS.indexOf(effectiveMode as NavScreen);
     if (currentIdx === -1) { swipeStartX.current = null; return; }
 
     if (swipeDelta.current < -threshold && currentIdx < NAV_SCREENS.length - 1) {
-      // 왼쪽으로 스와이프 → 다음 화면
       const next = NAV_SCREENS[currentIdx + 1];
       setMode(next); setActiveNav(next);
     } else if (swipeDelta.current > threshold && currentIdx > 0) {
-      // 오른쪽으로 스와이프 → 이전 화면
       const prev = NAV_SCREENS[currentIdx - 1];
       setMode(prev); setActiveNav(prev);
     }
@@ -616,7 +626,9 @@ export default function Home() {
     onTouchMove: handleSwipeMove,
     onTouchEnd: handleSwipeEnd,
   };
-  const currentNavIdx = NAV_SCREENS.indexOf(mode as NavScreen);
+  const currentNavIdx = mode === 'bank'
+    ? NAV_SCREENS.indexOf('quest' as NavScreen)
+    : NAV_SCREENS.indexOf(mode as NavScreen);
   const DotIndicator = () => currentNavIdx !== -1 ? (
     <div className="fixed bottom-[76px] left-0 right-0 flex justify-center gap-1.5 z-40 pointer-events-none">
       {NAV_SCREENS.map((_, i) => (
@@ -852,15 +864,15 @@ export default function Home() {
   );
 
   // ═══════════════════════════════════════
-  // 홈 허브 — 맵 + 스캔 중심
+  // 홈 — 학습 대시보드
   // ═══════════════════════════════════════
   if (mode === 'home') return (
     <div {...swipeProps} className="relative"><div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
       <div className="max-w-xl mx-auto px-4 pt-6">
-        {/* 헤더 — BloomLens + 키워드 맵 카운트 */}
+        {/* 헤더 */}
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-[#0a2265] to-[#1a3a8f] flex items-center justify-center text-base shadow-md shadow-blue-200">
+            <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-[#0a2265] to-[#1a3a8f] flex items-center justify-center shadow-md shadow-blue-200">
               <span className="text-white text-xs font-black">BL</span>
             </div>
             <div>
@@ -868,96 +880,56 @@ export default function Home() {
                 <span className="text-sm font-black text-gray-900">Bloom<span className="text-violet-600">Lens</span></span>
                 <span className="text-[9px] font-bold text-[#0a2265]/50 bg-[#0a2265]/5 px-1.5 py-0.5 rounded tracking-wider">S-AID</span>
               </div>
-              <div className="text-xs text-violet-500">
-                {(game.userKeywords?.length ?? 0) === 0
-                  ? '첫 키워드를 심어보세요'
-                  : `${game.userKeywords.length}개 키워드 탐색 중`}
-              </div>
+              <div className="text-xs text-violet-500">Lv.{game.level} {levelTitle(game.level)}</div>
             </div>
           </div>
           <div className="flex items-center gap-1.5">
             {game.streak > 0 && (
               <span className="text-xs text-orange-500 font-bold bg-orange-50 border border-orange-100 px-2 py-1 rounded-lg">🔥{game.streak}일</span>
             )}
-            <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-lg">{game.totalSolved}문제</span>
           </div>
         </div>
 
-        {/* 키워드 맵 영역 */}
-        <div className="bg-white/80 backdrop-blur border border-gray-100 rounded-3xl p-5 mb-5 min-h-[200px] flex flex-col justify-center relative overflow-hidden">
-          <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle, #7c3aed 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
+        {/* 학습 현황 3칸 */}
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          <div className="bg-white shadow-sm rounded-xl p-3 text-center border border-gray-50">
+            <div className="text-lg font-black text-violet-600">{game.totalSolved}</div>
+            <div className="text-[10px] text-gray-400">푼 문제</div>
+          </div>
+          <div className="bg-white shadow-sm rounded-xl p-3 text-center border border-gray-50">
+            <div className="text-lg font-black text-yellow-500">
+              {game.totalSolved > 0 ? `${Math.round((game.totalCorrect / game.totalSolved) * 100)}%` : '-'}
+            </div>
+            <div className="text-[10px] text-gray-400">정답률</div>
+          </div>
+          <div className="bg-white shadow-sm rounded-xl p-3 text-center border border-gray-50">
+            <div className="text-lg font-black text-orange-500">{game.streak > 0 ? `${game.streak}일` : '-'}</div>
+            <div className="text-[10px] text-gray-400">연속</div>
+          </div>
+        </div>
 
-          {(game.userKeywords?.length ?? 0) === 0 ? (
-            <div className="relative z-10">
-              {expandedKeywords.length === 0 && !expandingKeywords ? (
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 mb-2 text-center">첫번째 학습 키워드를 심어보세요.</p>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={keywordSeedInput}
-                      onChange={e => { setKeywordSeedInput(e.target.value); setExpandError(false); }}
-                      onKeyDown={e => e.key === 'Enter' && expandKeywords(keywordSeedInput)}
-                      placeholder="예: 광합성, 이차방정식..."
-                      className="flex-1 px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:border-violet-400 focus:bg-white"
-                    />
-                    <button
-                      onClick={() => expandKeywords(keywordSeedInput)}
-                      disabled={!keywordSeedInput.trim()}
-                      className="px-3 py-2 rounded-xl bg-violet-600 text-white text-sm font-bold disabled:bg-gray-200 disabled:text-gray-400 transition-colors"
-                    >🌱</button>
-                  </div>
-                  {expandError ? (
-                    <p className="text-[10px] text-red-400 text-center mt-2">⚠️ API 오류 — 다시 시도해주세요</p>
-                  ) : (
-                    <p className="text-[10px] text-gray-300 text-center mt-2">AI가 관련 키워드를 추천해줄게요</p>
-                  )}
-                </div>
-              ) : expandingKeywords ? (
-                <div className="text-center py-4">
-                  <span className="inline-block animate-spin text-2xl">🌱</span>
-                  <p className="text-xs text-violet-500 mt-2">키워드 맵을 펼치는 중...</p>
-                </div>
-              ) : (
-                <div>
-                  <p className="text-xs font-semibold text-violet-600 mb-2">✨ &quot;{keywordSeedInput}&quot; 관련 키워드</p>
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    {[keywordSeedInput, ...expandedKeywords].map(kw => (
-                      <button
-                        key={kw}
-                        onClick={() => {
-                          setGame(prev => {
-                            const merged = Array.from(new Set([...(prev.userKeywords ?? []), kw]));
-                            const g = { ...prev, userKeywords: merged };
-                            saveGame(g);
-                            return g;
-                          });
-                        }}
-                        className="bg-violet-50 border border-violet-200 rounded-xl px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-100 active:scale-95 transition-all"
-                      >
-                        ＋ {kw}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => {
-                      setGame(prev => {
-                        const all = [keywordSeedInput, ...expandedKeywords];
-                        const merged = Array.from(new Set([...(prev.userKeywords ?? []), ...all]));
-                        const g = { ...prev, userKeywords: merged };
-                        saveGame(g);
-                        return g;
-                      });
-                      setExpandedKeywords([]);
-                      setKeywordSeedInput('');
-                    }}
-                    className="w-full py-2 rounded-xl bg-violet-600 text-white text-xs font-bold"
-                  >전체 추가 ({1 + expandedKeywords.length}개)</button>
-                </div>
+        {/* XP 바 */}
+        <div className="bg-white shadow-sm rounded-xl px-3 py-2.5 mb-4 border border-gray-50">
+          <XpBar />
+        </div>
+
+        {/* 내 학습 맵 */}
+        <div className="bg-white/80 backdrop-blur border border-gray-100 rounded-2xl p-4 mb-4 relative overflow-hidden">
+          <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle, #7c3aed 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
+          <div className="relative z-10">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-bold text-gray-700">🗺️ 내 학습 맵</span>
+              {(game.userKeywords?.length ?? 0) > 0 && (
+                <span className="text-[10px] text-violet-400">{game.userKeywords.length}개 키워드</span>
               )}
             </div>
-          ) : (
-            <div className="relative z-10 w-full">
+            {(game.userKeywords?.length ?? 0) === 0 ? (
+              <div className="text-center py-5">
+                <div className="text-3xl mb-2 opacity-30">🌱</div>
+                <p className="text-xs text-gray-400 font-medium mb-0.5">아직 키워드가 없어요</p>
+                <p className="text-[10px] text-gray-300">시험지를 스캔하면 자동으로 키워드가 쌓여요</p>
+              </div>
+            ) : (
               <div className="flex flex-wrap gap-2">
                 {game.userKeywords.map(kw => (
                   <button
@@ -969,21 +941,20 @@ export default function Home() {
                     <div className="text-[10px] text-violet-400 mt-0.5">탭해서 풀기</div>
                   </button>
                 ))}
-                <button
-                  onClick={goScan}
-                  className="border-2 border-dashed border-gray-200 rounded-xl px-3 py-2 flex flex-col items-center justify-center hover:border-violet-300 transition-colors"
-                >
-                  <div className="text-xs font-medium text-gray-400">＋</div>
-                  <div className="text-[10px] text-gray-300 mt-0.5">키워드 추가</div>
-                </button>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
-        {/* 메인 CTA — 스캔 */}
-        <button onClick={goScan} className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold text-[15px] shadow-lg shadow-violet-300/30 active:scale-[0.98] transition-transform">
+        {/* CTA 버튼 */}
+        <button onClick={goScan} className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold text-[15px] shadow-lg shadow-violet-300/30 active:scale-[0.98] transition-transform mb-2">
           📷 시험지 스캔하기
+        </button>
+        <button
+          onClick={() => { loadBank(); setMode('bank'); setActiveNav('quest'); }}
+          className="w-full py-3 rounded-xl bg-violet-50 border border-violet-200 text-violet-600 font-medium text-sm active:scale-[0.98] transition-transform"
+        >
+          📦 문제은행 바로가기
         </button>
       </div>
       <BottomNav />
@@ -1141,9 +1112,47 @@ export default function Home() {
         </div>
 
         {/* 촬영 후 안내 */}
-        <div className="bg-green-50 border border-green-200 rounded-xl p-3 mb-4">
+        <div className="bg-green-50 border border-green-200 rounded-xl p-3 mb-3">
           <p className="text-xs text-green-600 leading-relaxed">✨ <strong>선택한 문제를 기반으로</strong> AI가 같은 개념, 다른 숫자의 유사 문제를 만들어요. 진짜 이해했는지 확인!</p>
         </div>
+
+        {/* 키워드 추가 (AI 추천 + 직접 입력) */}
+        {(() => {
+          const aiKws = Array.from(new Set(parseResult.problems.flatMap(p => p.keywords || []))).filter(Boolean).slice(0, 8) as string[];
+          const userKws = game.userKeywords ?? [];
+          const addKw = (kw: string) => {
+            setGame(prev => {
+              const merged = Array.from(new Set([...(prev.userKeywords ?? []), kw]));
+              const g = { ...prev, userKeywords: merged };
+              saveGame(g);
+              return g;
+            });
+          };
+          return (
+            <div className="bg-violet-50 border border-violet-200 rounded-xl p-3 mb-4">
+              <p className="text-xs font-semibold text-violet-700 mb-2">🏷️ 내 학습 맵에 키워드 추가</p>
+              {aiKws.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {aiKws.map(kw => (
+                    <button key={kw} onClick={() => addKw(kw)}
+                      className={`text-[11px] px-2.5 py-1 rounded-lg border transition-colors ${userKws.includes(kw) ? 'bg-violet-200 text-violet-700 border-violet-300' : 'bg-white text-violet-600 border-violet-200 hover:bg-violet-100 active:scale-95'}`}>
+                      {userKws.includes(kw) ? '✓ ' : '＋ '}{kw}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <input type="text" value={parsedKeywordTag} onChange={e => setParsedKeywordTag(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && parsedKeywordTag.trim()) { addKw(parsedKeywordTag.trim()); setParsedKeywordTag(''); } }}
+                  placeholder="직접 입력 후 엔터..."
+                  className="flex-1 px-2.5 py-1.5 rounded-lg border border-violet-200 bg-white text-xs text-gray-900 placeholder-gray-300 focus:outline-none focus:border-violet-400" />
+                <button onClick={() => { if (parsedKeywordTag.trim()) { addKw(parsedKeywordTag.trim()); setParsedKeywordTag(''); } }}
+                  disabled={!parsedKeywordTag.trim()}
+                  className="px-3 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-bold disabled:bg-gray-200 disabled:text-gray-400">추가</button>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* 문제 목록 */}
         <div className="space-y-2 mb-4">
@@ -1197,15 +1206,16 @@ export default function Home() {
     return (
       <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
         <div className="max-w-xl mx-auto px-4 py-6">
-          <div className="text-center mb-5">
-            <div className="text-3xl mb-1">📝</div>
-            <h2 className="text-lg font-extrabold text-gray-900">문제 {problems.length}개 생성 완료!</h2>
-            <p className="text-xs text-gray-500 mt-1">문제은행에 저장되었어요</p>
-          </div>
-
-          {/* 저장 확인 배지 */}
-          <div className="bg-green-50 border border-green-200 rounded-xl p-2.5 mb-4 text-center">
-            <span className="text-xs text-green-600 font-medium">✅ 문제은행에 저장 완료 — 언제든 다시 풀 수 있어요</span>
+          {/* 상단 완성 배너 + 바로 풀기 CTA */}
+          <div className="bg-gradient-to-r from-violet-600 to-violet-500 rounded-2xl p-4 mb-4 flex items-center justify-between shadow-lg shadow-violet-300/30">
+            <div>
+              <div className="text-white font-extrabold text-base">✅ {problems.length}개 완성!</div>
+              <div className="text-violet-200 text-xs mt-0.5">지금 바로 풀어볼 수 있어요</div>
+            </div>
+            <button onClick={startQuizFromPreview}
+              className="bg-white text-violet-600 font-bold text-sm px-4 py-2.5 rounded-xl shadow-sm active:scale-95 transition-transform">
+              지금 풀기 ▶
+            </button>
           </div>
 
           {/* 문제 목록 */}
@@ -1245,14 +1255,19 @@ export default function Home() {
             ))}
           </div>
 
-          {/* CTA */}
+          {/* 하단 CTA */}
           <div className="space-y-2.5">
             <button onClick={startQuizFromPreview} className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold text-[15px] shadow-lg shadow-violet-300/30 active:scale-[0.98] transition-transform">
               ▶️ 지금 풀어보기
             </button>
-            <button onClick={goScan} className="w-full py-3 rounded-xl bg-violet-50 border border-violet-200 text-violet-600 font-medium text-sm">
-              📷 다른 문제 스캔하기
-            </button>
+            <div className="flex gap-2">
+              <button onClick={() => { loadBank(); setMode('bank'); setActiveNav('quest'); }} className="flex-1 py-3 rounded-xl bg-violet-50 border border-violet-200 text-violet-600 font-medium text-sm active:scale-95 transition-transform">
+                📦 문제은행
+              </button>
+              <button onClick={goScan} className="flex-1 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-500 font-medium text-sm active:scale-95 transition-transform">
+                📷 다시 스캔
+              </button>
+            </div>
           </div>
         </div>
         <BottomNav />
@@ -1577,10 +1592,21 @@ export default function Home() {
                     </div>
                   ))}
                 </div>
+                {/* 풀기 개수 선택 */}
+                <div className="flex gap-2 mb-3">
+                  <span className="text-xs text-gray-500 self-center">풀 문제 수:</span>
+                  {[5, 10, bankProblems.length].filter((v, i, arr) => arr.indexOf(v) === i && v > 0).map(n => (
+                    <button key={n}
+                      onClick={() => setBankPlayCount(n)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${bankPlayCount === n ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                      {n === bankProblems.length ? `전체 (${n})` : `${n}문제`}
+                    </button>
+                  ))}
+                </div>
                 <button
-                  onClick={() => startBankQuiz(bankProblems.slice(0, Math.min(bankProblems.length, 5)))}
+                  onClick={() => startBankQuiz(bankProblems.slice(0, Math.min(bankProblems.length, bankPlayCount)))}
                   className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold text-[15px] shadow-lg shadow-violet-300/30">
-                  ▶️ {Math.min(bankProblems.length, 5)}문제 풀기
+                  ▶️ {Math.min(bankProblems.length, bankPlayCount)}문제 풀기
                 </button>
               </>
             )}
