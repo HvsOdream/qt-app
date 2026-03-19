@@ -31,14 +31,42 @@ export async function signInWithGoogle() {
   if (error) console.error('Google 로그인 오류:', error.message);
 }
 
-export async function signInWithEmail(email: string) {
+// 이메일 + 비밀번호 로그인
+export async function signInWithPassword(email: string, password: string) {
   if (!supabase) return { error: 'Supabase 미설정' };
-  const { error } = await supabase.auth.signInWithOtp({
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) return { error: error.message };
+  return { error: null };
+}
+
+// 이메일 + 비밀번호 회원가입
+export async function signUpWithPassword(email: string, password: string) {
+  if (!supabase) return { error: 'Supabase 미설정' };
+  const { error } = await supabase.auth.signUp({
     email,
+    password,
     options: {
       emailRedirectTo: `${window.location.origin}/auth/callback`,
     },
   });
+  if (error) return { error: error.message };
+  return { error: null };
+}
+
+// 비밀번호 재설정 메일 발송
+export async function sendPasswordReset(email: string) {
+  if (!supabase) return { error: 'Supabase 미설정' };
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/auth/reset-password`,
+  });
+  if (error) return { error: error.message };
+  return { error: null };
+}
+
+// 새 비밀번호 저장 (reset 후 호출)
+export async function updatePassword(newPassword: string) {
+  if (!supabase) return { error: 'Supabase 미설정' };
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
   if (error) return { error: error.message };
   return { error: null };
 }
