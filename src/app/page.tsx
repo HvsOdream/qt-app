@@ -166,6 +166,10 @@ export default function Home() {
   const [expandingKeywords, setExpandingKeywords] = useState(false);
   const [expandError, setExpandError] = useState(false);
   const [activeNav, setActiveNav] = useState<'home' | 'scan' | 'quest' | 'profile'>('home');
+  // 꽃 피는 로딩
+  const [bloomStage, setBloomStage] = useState(0);
+  const [bloomCountdown, setBloomCountdown] = useState(0);
+  const bloomTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // 게이미피케이션
   const [game, setGame] = useState<GameState>(DEFAULT_GAME);
@@ -326,29 +330,59 @@ export default function Home() {
     } finally { setParsing(false); }
   };
 
-  // ─── 유사 문제 생성 ───
+  // ─── 꽃 로딩 타이머 시작/종료 ───
+  const startBloomTimer = (estimatedSec: number) => {
+    setBloomStage(0);
+    setBloomCountdown(estimatedSec);
+    let elapsed = 0;
+    if (bloomTimerRef.current) clearInterval(bloomTimerRef.current);
+    bloomTimerRef.current = setInterval(() => {
+      elapsed += 1;
+      setBloomCountdown(Math.max(0, estimatedSec - elapsed));
+      setBloomStage(Math.min(4, Math.floor((elapsed / estimatedSec) * 4)));
+      if (elapsed >= estimatedSec + 5) {
+        if (bloomTimerRef.current) clearInterval(bloomTimerRef.current);
+      }
+    }, 1000);
+  };
+  const stopBloomTimer = () => {
+    if (bloomTimerRef.current) { clearInterval(bloomTimerRef.current); bloomTimerRef.current = null; }
+    setBloomStage(5); // 완료
+  };
+
+  // ─── 유사 문제 생성 (병렬) ───
   const generateSimilar = async () => {
     if (!parseResult || selectedParsedIdx.length === 0) return;
     setLoading(true);
+    // 예상 시간: 문제 1개당 약 12초, 병렬이므로 최대 1개 기준
+    startBloomTimer(15);
     try {
-      const allProblems: QuizProblem[] = [];
-      for (const idx of selectedParsedIdx) {
-        const original = parseResult.problems[idx];
-        const res = await fetch('/api/generate-similar', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ originalProblem: original, count: Math.max(1, Math.floor(count / selectedParsedIdx.length)), difficulty }),
-        });
-        const data = await res.json();
-        if (data.problems) allProblems.push(...data.problems);
-      }
+      // 순차 → Promise.all 병렬 처리
+      const results = await Promise.all(
+        selectedParsedIdx.map(idx => {
+          const original = parseResult.problems[idx];
+          return fetch('/api/generate-similar', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ originalProblem: original, count: Math.max(1, Math.floor(count / selectedParsedIdx.length)), difficulty }),
+          }).then(r => r.json()).catch(() => ({ problems: [] }));
+        })
+      );
+      const allProblems: QuizProblem[] = results.flatMap(d => d.problems || []);
       if (allProblems.length > 0) {
         setProblems(allProblems.slice(0, count));
         setCurrentIndex(0); setSelectedAnswer(null); setShowExplanation(false);
         setScore({ correct: 0, total: 0 }); setQuizAnswers([]); setConsecutiveCorrect(0);
         setPreviewExpanded(null);
+        stopBloomTimer();
         setMode('preview');
+      } else {
+        stopBloomTimer();
+        alert('문제 생성에 실패했습니다. 다시 시도해주세요.');
       }
-    } catch { alert('문제 생성에 실패했습니다.'); }
+    } catch {
+      stopBloomTimer();
+      alert('문제 생성에 실패했습니다.');
+    }
     finally { setLoading(false); }
   };
 
@@ -602,6 +636,49 @@ export default function Home() {
           ))}
         </div>
       </div>
+    </div>
+  );
+
+  // ─── 꽃 피는 로딩 오버레이 ───
+  const BLOOM_EMOJIS = ['🌱', '🌿', '🌸', '🌺', '🌻'];
+  const BLOOM_MSGS = ['시험지 분석 중...', '개념 이해 중...', '문제 설계 중...', '마무리 다듬는 중...', '완성!'];
+  const BloomLoading = () => !loading ? null : (
+    <div className="fixed inset-0 z-[200] bg-[#0a2265]/90 backdrop-blur-sm flex flex-col items-center justify-center px-8">
+      {/* 꽃 이모지 — 단계별 크기 펄스 */}
+      <div
+        key={bloomStage}
+        className="text-[80px] mb-4 animate-bounce"
+        style={{ animationDuration: '1.2s' }}
+      >
+        {BLOOM_EMOJIS[Math.min(bloomStage, 4)]}
+      </div>
+
+      {/* 단계 메시지 */}
+      <p className="text-white text-base font-bold mb-1">
+        {BLOOM_MSGS[Math.min(bloomStage, 4)]}
+      </p>
+
+      {/* 예상 잔여 시간 */}
+      <p className="text-blue-200 text-xs mb-6">
+        {bloomCountdown > 0 ? `약 ${bloomCountdown}초 남았어요` : '거의 다 됐어요 ✨'}
+      </p>
+
+      {/* 프로그레스 바 */}
+      <div className="w-full max-w-xs bg-white/10 rounded-full h-2 overflow-hidden">
+        <div
+          className="h-full bg-gradient-to-r from-violet-400 to-yellow-300 rounded-full transition-all duration-1000"
+          style={{ width: `${Math.min(100, (bloomStage / 4) * 100)}%` }}
+        />
+      </div>
+
+      {/* 꽃잎 단계 점 */}
+      <div className="flex gap-2 mt-4">
+        {BLOOM_EMOJIS.slice(0, 4).map((e, i) => (
+          <span key={i} className={`text-sm transition-all duration-300 ${i <= bloomStage ? 'opacity-100 scale-125' : 'opacity-20'}`}>{e}</span>
+        ))}
+      </div>
+
+      <p className="text-white/30 text-[10px] mt-6">AI가 유사 문제를 직접 설계하고 있어요</p>
     </div>
   );
 
@@ -1043,6 +1120,7 @@ export default function Home() {
   // ═══════════════════════════════════════
   if (mode === 'parsed' && parseResult) return (
     <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
+      <BloomLoading />
       <div className="max-w-xl mx-auto px-4 py-6">
         <button onClick={goScan} className="text-violet-600 text-sm mb-3 flex items-center gap-1">← 다시 촬영</button>
 
