@@ -864,6 +864,12 @@ export default function Home() {
       <div className="w-full max-w-sm">
         {/* 로고 */}
         <div className="text-center mb-8">
+          <img
+            src="https://www.seoil.ac.kr/sites/seoil/intro/images/logo_w.png"
+            alt="서일대학교"
+            className="h-8 mx-auto mb-4 opacity-90"
+            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          />
           <h1 className="text-5xl font-black text-white tracking-tight">
             Bloom<span className="text-yellow-300">Lens</span>
           </h1>
