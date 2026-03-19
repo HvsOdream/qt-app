@@ -186,12 +186,14 @@ export default function Home() {
   >('loading');
   const [tab, setTab] = useState<'photo' | 'keyword'>('photo');
   const [keywordInput, setKeywordInput] = useState('');
-  // 홈 문제 생성 입력
+  // 홈 문제 생성 — 레거시(호환용)
   const [homeGrade, setHomeGrade] = useState('');
   const [homeSubject, setHomeSubject] = useState('');
   const [homeUnit, setHomeUnit] = useState('');
-  const [showGoalModal, setShowGoalModal] = useState(false);  // 바텀시트
-  const [pendingKeyword, setPendingKeyword] = useState<string | null>(null); // 학습맵 확인 모달
+  const [showGoalModal, setShowGoalModal] = useState(false);  // 바텀시트(단원 선택)
+  // 학습 범위 확인 모달: {subject, topic} 또는 null
+  const [pendingRange, setPendingRange] = useState<{ subject: string; topic: string } | null>(null);
+  const [pendingRangeLoading, setPendingRangeLoading] = useState(false);
   const [problemSource, setProblemSource] = useState<'ai' | 'scan' | 'bank'>('ai'); // 문제 출처
   const [activeNav, setActiveNav] = useState<'home' | 'scan' | 'quest' | 'profile'>('home');
   // 꽃 피는 로딩
@@ -266,6 +268,8 @@ export default function Home() {
     }
     // 온보딩 완료 여부
     setMode(g.onboardDone ? 'home' : 'onboard1');
+    // 홈 진입 시 스캔 단원 목록 미리 로드
+    loadBank(undefined, false);
   }, []);
 
   useEffect(() => {
@@ -993,41 +997,50 @@ export default function Home() {
           className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold text-[15px] shadow-lg shadow-violet-300/30 active:scale-[0.98] transition-transform mb-4"
         >
           🎯 오늘 뭘 공부할까?
-          {(game.studyGrade || game.studySubject) && (
+          {Object.keys(bankCategories).length > 0 && (
             <span className="ml-2 text-violet-200 text-xs font-normal">
-              {[game.studyGrade, game.studySubject].filter(Boolean).join(' · ')}
+              {Object.values(bankCategories).reduce((s, t) => s + Object.keys(t).length, 0)}개 단원
             </span>
           )}
         </button>
 
-        {/* 내 학습 맵 */}
+        {/* 내 학습 맵 — 스캔된 단원 기반 */}
         <div className="bg-white/80 backdrop-blur border border-gray-100 rounded-2xl p-4 mb-4 relative overflow-hidden">
           <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle, #7c3aed 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
           <div className="relative z-10">
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-bold text-gray-700">🗺️ 내 학습 맵</span>
-              {(game.userKeywords?.length ?? 0) > 0 && (
-                <span className="text-[10px] text-violet-400">{game.userKeywords.length}개 키워드</span>
+              {Object.keys(bankCategories).length > 0 && (
+                <span className="text-[10px] text-violet-400">
+                  {Object.values(bankCategories).reduce((s, t) => s + Object.keys(t).length, 0)}개 단원
+                </span>
               )}
             </div>
-            {(game.userKeywords?.length ?? 0) === 0 ? (
+            {Object.keys(bankCategories).length === 0 ? (
               <div className="text-center py-5">
                 <div className="text-3xl mb-2 opacity-30">🌱</div>
-                <p className="text-xs text-gray-400 font-medium mb-0.5">아직 키워드가 없어요</p>
-                <p className="text-[10px] text-gray-300">시험지를 스캔하면 자동으로 키워드가 쌓여요</p>
+                <p className="text-xs text-gray-400 font-medium mb-0.5">아직 스캔한 문제가 없어요</p>
+                <p className="text-[10px] text-gray-300">시험지를 스캔하면 단원이 자동으로 쌓여요</p>
               </div>
             ) : (
-              <div className="flex flex-wrap gap-2">
-                {game.userKeywords.map(kw => (
-                  <button
-                    key={kw}
-                    onClick={() => setPendingKeyword(kw)}
-                    className="bg-violet-50 border border-violet-200 rounded-xl px-3 py-2 text-left hover:bg-violet-100 active:scale-95 transition-all"
-                  >
-                    <div className="text-xs font-bold text-violet-700">{kw}</div>
-                    <div className="text-[10px] text-violet-400 mt-0.5">탭해서 생성</div>
-                  </button>
-                ))}
+              <div className="space-y-1.5">
+                {Object.entries(bankCategories).map(([subject, topics]) =>
+                  Object.entries(topics).map(([topic, cnt]) => (
+                    <button
+                      key={`${subject}-${topic}`}
+                      onClick={() => setPendingRange({ subject, topic })}
+                      className="w-full flex items-center justify-between bg-violet-50 hover:bg-violet-100 border border-violet-100 rounded-xl px-3 py-2.5 active:scale-[0.98] transition-all text-left">
+                      <div>
+                        <div className="text-xs font-bold text-violet-800">{topic}</div>
+                        <div className="text-[10px] text-violet-400">{subject}</div>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] bg-white text-violet-500 px-2 py-0.5 rounded-lg border border-violet-100">{cnt}문제</span>
+                        <span className="text-[10px] text-violet-400">유사 생성 →</span>
+                      </div>
+                    </button>
+                  ))
+                )}
               </div>
             )}
           </div>
@@ -1053,51 +1066,66 @@ export default function Home() {
       <LevelUpModal />
       <DotIndicator />
 
-      {/* 바텀시트 — 오늘 공부 설정 */}
+      {/* 바텀시트 — 오늘 뭘 공부할까? (스캔된 단원 선택) */}
       {showGoalModal && (
         <div className="fixed inset-0 z-[150] flex items-end" onClick={() => setShowGoalModal(false)}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <div className="relative w-full bg-white rounded-t-3xl px-5 pt-4 pb-10 shadow-2xl max-h-[85vh] overflow-y-auto"
+          <div className="relative w-full bg-white rounded-t-3xl px-5 pt-4 pb-10 shadow-2xl max-h-[80vh] overflow-y-auto"
             onClick={e => e.stopPropagation()}>
-            {/* 핸들 */}
             <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-4" />
-            <h2 className="text-base font-extrabold text-gray-900 mb-4">📚 오늘 뭘 공부할까요?</h2>
+            <h2 className="text-base font-extrabold text-gray-900 mb-1">📚 오늘 뭘 공부할까요?</h2>
+            <p className="text-xs text-gray-400 mb-4">스캔한 문제 단원을 골라주세요</p>
 
-            {/* 학년/상황 */}
-            <div className="mb-3">
-              <label className="text-xs text-gray-500 font-medium mb-1.5 block">학년 / 상황</label>
-              <input type="text" value={homeGrade} onChange={e => setHomeGrade(e.target.value)}
-                placeholder="고2, 대학교 3학년, 정보처리기사..."
-                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:border-violet-400 focus:bg-white" />
-              <div className="flex gap-1.5 mt-1.5 flex-wrap">
-                {['고1', '고2', '고3', '대학교', '자격증'].map(g => (
-                  <button key={g} onClick={() => setHomeGrade(g)}
-                    className={`text-xs px-3 py-1 rounded-lg border transition-colors ${homeGrade === g ? 'bg-violet-600 text-white border-violet-600' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
-                    {g}
-                  </button>
-                ))}
+            {Object.keys(bankCategories).length === 0 ? (
+              /* 스캔 없음 → 스캔 유도 */
+              <div className="text-center py-8">
+                <div className="text-4xl mb-3 opacity-30">📷</div>
+                <p className="text-sm font-bold text-gray-600 mb-1">아직 스캔한 문제가 없어요</p>
+                <p className="text-xs text-gray-400 mb-5">시험지를 스캔하면 단원이 자동으로 추가돼요</p>
+                <button onClick={() => { setShowGoalModal(false); setMode('scan'); setActiveNav('scan'); }}
+                  className="px-6 py-3 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold text-sm">
+                  📷 시험지 스캔하기
+                </button>
+              </div>
+            ) : (
+              /* 단원 목록 */
+              <div className="space-y-2">
+                {Object.entries(bankCategories).map(([subject, topics]) =>
+                  Object.entries(topics).map(([topic, cnt]) => (
+                    <button
+                      key={`${subject}-${topic}`}
+                      onClick={() => { setShowGoalModal(false); setPendingRange({ subject, topic }); }}
+                      className="w-full flex items-center justify-between bg-gray-50 hover:bg-violet-50 border border-gray-100 hover:border-violet-200 rounded-2xl px-4 py-3.5 active:scale-[0.98] transition-all text-left">
+                      <div>
+                        <div className="text-sm font-bold text-gray-900">{topic}</div>
+                        <div className="text-xs text-gray-400 mt-0.5">{subject}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] bg-violet-100 text-violet-600 px-2 py-0.5 rounded-lg font-medium">{cnt}문제</span>
+                        <span className="text-gray-300 text-sm">→</span>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 학습 범위 → 문제 생성 확인 모달 (스캔 기반) */}
+      {pendingRange && (
+        <div className="fixed inset-0 z-[160] flex items-end" onClick={() => { if (!pendingRangeLoading) setPendingRange(null); }}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div className="relative w-full max-w-xl mx-auto bg-white rounded-t-3xl p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-5" />
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-2xl bg-violet-100 flex items-center justify-center text-lg flex-shrink-0">📝</div>
+              <div>
+                <div className="text-sm font-bold text-gray-900">{pendingRange.topic}</div>
+                <div className="text-xs text-gray-500 mt-0.5">{pendingRange.subject} · 스캔 문제 기반 생성</div>
               </div>
             </div>
-
-            {/* 과목/전공 */}
-            <div className="mb-3">
-              <label className="text-xs text-gray-500 font-medium mb-1.5 block">과목 / 전공</label>
-              <input type="text" value={homeSubject} onChange={e => setHomeSubject(e.target.value)}
-                placeholder="수학, 영어, 자료구조..."
-                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:border-violet-400 focus:bg-white" />
-            </div>
-
-            {/* 단원 (선택) */}
-            <div className="mb-4">
-              <label className="text-xs text-gray-500 font-medium mb-1.5 block">
-                단원 <span className="text-gray-300 font-normal">— 없으면 전범위</span>
-              </label>
-              <input type="text" value={homeUnit} onChange={e => setHomeUnit(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && homeSubject.trim()) { generateFromGoal(); setShowGoalModal(false); } }}
-                placeholder="이차함수, 트리, 관계형 데이터베이스..."
-                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:border-violet-400 focus:bg-white" />
-            </div>
-
             {/* 난이도 + 문제수 */}
             <div className="flex gap-3 mb-4">
               <div className="flex-1">
@@ -1123,81 +1151,52 @@ export default function Home() {
                 </div>
               </div>
             </div>
-
-            <button
-              onClick={() => { generateFromGoal(); setShowGoalModal(false); }}
-              disabled={!homeSubject.trim() || loading}
-              className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold text-base shadow-lg shadow-violet-300/30 disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none active:scale-[0.98] transition-all"
-            >
-              🎯 문제 만들기
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* 학습맵 키워드 → 문제 생성 확인 바텀시트 */}
-      {pendingKeyword && (
-        <div className="fixed inset-0 z-[160] flex items-end" onClick={() => setPendingKeyword(null)}>
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <div className="relative w-full max-w-xl mx-auto bg-white rounded-t-3xl p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-5" />
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-2xl bg-violet-100 flex items-center justify-center text-lg flex-shrink-0">✨</div>
-              <div>
-                <div className="text-sm font-bold text-gray-900">문제를 만들까요?</div>
-                <div className="text-xs text-gray-500 mt-0.5">
-                  <span className="font-medium text-violet-600">{pendingKeyword}</span> 키워드로 AI 문제를 생성합니다
-                </div>
-              </div>
-            </div>
-            {/* 설정 요약 */}
-            <div className="bg-gray-50 rounded-xl p-3 mb-4 space-y-1.5">
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-500">학년/상황</span>
-                <span className="font-medium text-gray-700">{game.studyGrade || '설정 안됨'}</span>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-500">과목</span>
-                <span className="font-medium text-gray-700">{game.studySubject || pendingKeyword}</span>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-500">단원/주제</span>
-                <span className="font-medium text-violet-600">{pendingKeyword}</span>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-500">난이도 / 문제 수</span>
-                <span className="font-medium text-gray-700">{['','하','중','상'][difficulty]} / {count}문제</span>
-              </div>
-            </div>
-            <p className="text-[10px] text-amber-600 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 mb-4">
-              ⚠️ AI가 생성하는 문제입니다. 교과서 내용과 다를 수 있으니 참고용으로 활용하세요.
+            <p className="text-[10px] text-green-700 bg-green-50 border border-green-100 rounded-xl px-3 py-2 mb-4">
+              ✅ 내가 스캔한 문제를 기반으로 유사 문제를 생성합니다. 할루시네이션 없음.
             </p>
             <div className="flex gap-2">
-              <button onClick={() => setPendingKeyword(null)}
-                className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-500 font-medium text-sm active:scale-95 transition-transform">
+              <button onClick={() => setPendingRange(null)} disabled={pendingRangeLoading}
+                className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-500 font-medium text-sm active:scale-95 transition-transform disabled:opacity-50">
                 취소
               </button>
               <button
-                onClick={() => {
-                  const kw = pendingKeyword;
-                  setPendingKeyword(null);
-                  setLoading(true); startBloomTimer(15);
-                  fetch('/api/generate-by-topic', {
-                    method: 'POST', headers: deviceHeaders(),
-                    body: JSON.stringify({ grade: game.studyGrade || '', subject: game.studySubject || kw, topic: kw, difficulty, count }),
-                  }).then(r => r.json()).then(data => {
-                    const all: QuizProblem[] = data.problems || [];
+                disabled={pendingRangeLoading}
+                onClick={async () => {
+                  const { subject, topic } = pendingRange;
+                  setPendingRangeLoading(true);
+                  try {
+                    // 1. 해당 단원의 스캔 문제 가져오기
+                    const bankRes = await fetch(
+                      `/api/question-bank?subject=${encodeURIComponent(subject)}&topic=${encodeURIComponent(topic)}&limit=20`,
+                      { headers: deviceHeaders() }
+                    );
+                    const bankData = await bankRes.json();
+                    const templates: QuizProblem[] = bankData.problems || [];
+                    if (templates.length === 0) {
+                      alert('이 단원에 스캔된 문제가 없어요. 먼저 스캔해 주세요!');
+                      setPendingRangeLoading(false); return;
+                    }
+                    setPendingRange(null); setPendingRangeLoading(false);
+                    // 2. 랜덤 템플릿 선택 후 generate-similar
+                    const template = templates[Math.floor(Math.random() * templates.length)];
+                    setLoading(true); startBloomTimer(20);
+                    const genRes = await fetch('/api/generate-similar', {
+                      method: 'POST', headers: deviceHeaders(),
+                      body: JSON.stringify({ originalProblem: template, count, difficulty }),
+                    });
+                    const genData = await genRes.json();
+                    const all: QuizProblem[] = genData.problems || [];
                     if (all.length > 0) {
                       setProblems(all); setCurrentIndex(0); setSelectedAnswer(null);
                       setShowExplanation(false); setScore({ correct: 0, total: 0 });
                       setQuizAnswers([]); setConsecutiveCorrect(0); setPreviewExpanded(null);
-                      setProblemSource('ai'); stopBloomTimer(); setMode('preview');
+                      setProblemSource('scan'); stopBloomTimer(); setMode('preview');
                     } else { stopBloomTimer(); alert('문제 생성에 실패했습니다.'); }
-                  }).catch(() => { stopBloomTimer(); alert('오류가 발생했습니다.'); })
-                    .finally(() => setLoading(false));
+                  } catch { setPendingRangeLoading(false); stopBloomTimer(); alert('오류가 발생했습니다.'); }
+                  finally { setLoading(false); }
                 }}
-                className="flex-2 flex-1 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold text-sm active:scale-95 transition-transform shadow-lg shadow-violet-300/30">
-                🎯 문제 만들기
+                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold text-sm active:scale-95 transition-transform shadow-lg shadow-violet-300/30 disabled:opacity-50">
+                {pendingRangeLoading ? '⏳ 준비 중...' : '🎯 유사 문제 만들기'}
               </button>
             </div>
           </div>
@@ -1359,39 +1358,19 @@ export default function Home() {
           <p className="text-xs text-green-600 leading-relaxed">✨ <strong>선택한 문제를 기반으로</strong> AI가 같은 개념, 다른 숫자의 유사 문제를 만들어요. 진짜 이해했는지 확인!</p>
         </div>
 
-        {/* 키워드 추가 (AI 추천 + 직접 입력) */}
+        {/* 스캔된 단원 정보 — 학습맵 자동 반영 안내 */}
         {(() => {
-          const aiKws = Array.from(new Set(parseResult.problems.flatMap(p => p.keywords || []))).filter(Boolean).slice(0, 8) as string[];
-          const userKws = game.userKeywords ?? [];
-          const addKw = (kw: string) => {
-            setGame(prev => {
-              const merged = Array.from(new Set([...(prev.userKeywords ?? []), kw]));
-              const g = { ...prev, userKeywords: merged };
-              saveGame(g);
-              return g;
-            });
-          };
+          const subjects = Array.from(new Set(parseResult.problems.map(p => p.subject).filter(Boolean)));
+          const topics = Array.from(new Set(parseResult.problems.map(p => p.topic).filter(Boolean)));
+          if (subjects.length === 0 && topics.length === 0) return null;
           return (
-            <div className="bg-violet-50 border border-violet-200 rounded-xl p-3 mb-4">
-              <p className="text-xs font-semibold text-violet-700 mb-2">🏷️ 내 학습 맵에 키워드 추가</p>
-              {aiKws.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {aiKws.map(kw => (
-                    <button key={kw} onClick={() => addKw(kw)}
-                      className={`text-[11px] px-2.5 py-1 rounded-lg border transition-colors ${userKws.includes(kw) ? 'bg-violet-200 text-violet-700 border-violet-300' : 'bg-white text-violet-600 border-violet-200 hover:bg-violet-100 active:scale-95'}`}>
-                      {userKws.includes(kw) ? '✓ ' : '＋ '}{kw}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <div className="flex gap-2">
-                <input type="text" value={parsedKeywordTag} onChange={e => setParsedKeywordTag(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && parsedKeywordTag.trim()) { addKw(parsedKeywordTag.trim()); setParsedKeywordTag(''); } }}
-                  placeholder="직접 입력 후 엔터..."
-                  className="flex-1 px-2.5 py-1.5 rounded-lg border border-violet-200 bg-white text-xs text-gray-900 placeholder-gray-300 focus:outline-none focus:border-violet-400" />
-                <button onClick={() => { if (parsedKeywordTag.trim()) { addKw(parsedKeywordTag.trim()); setParsedKeywordTag(''); } }}
-                  disabled={!parsedKeywordTag.trim()}
-                  className="px-3 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-bold disabled:bg-gray-200 disabled:text-gray-400">추가</button>
+            <div className="bg-violet-50 border border-violet-100 rounded-xl px-3 py-2.5 mb-4 flex items-center gap-2">
+              <span className="text-base">🗺️</span>
+              <div>
+                <p className="text-xs font-semibold text-violet-700">학습 맵에 자동 추가돼요</p>
+                <p className="text-[10px] text-violet-500 mt-0.5">
+                  {[...subjects, ...topics].filter(Boolean).slice(0, 4).join(' · ')}
+                </p>
               </div>
             </div>
           );
@@ -1710,41 +1689,20 @@ export default function Home() {
             </div>
           )}
 
-          {/* 키워드 → 맵에 추가 */}
+          {/* 이번 문제 단원 정보 (학습맵 자동 반영 안내) */}
           {(() => {
-            const allKw = Array.from(new Set(quizAnswers.flatMap(a => a.keywords || []))).filter(Boolean);
-            if (allKw.length === 0) return null;
-            const userKw = game.userKeywords ?? [];
-            const newKw = allKw.filter(k => !userKw.includes(k));
-            const existingKw = allKw.filter(k => userKw.includes(k));
+            const topics = Array.from(new Set(quizAnswers.map(a => a.topic).filter(Boolean)));
+            const subjects = Array.from(new Set(quizAnswers.map(a => a.subject).filter(Boolean)));
+            if (topics.length === 0 && subjects.length === 0) return null;
             return (
-              <div className="bg-violet-50 border border-violet-200 rounded-2xl p-4 mb-4">
-                <div className="text-xs font-bold text-violet-700 mb-2">🗺️ 이번 문제의 키워드</div>
-                <div className="flex flex-wrap gap-1.5 mb-3">
-                  {allKw.map(kw => (
-                    <span key={kw} className={`text-xs px-2.5 py-1 rounded-lg font-medium ${userKw.includes(kw) ? 'bg-violet-200 text-violet-700' : 'bg-white border border-violet-300 text-violet-600'}`}>
-                      {userKw.includes(kw) ? '✓ ' : ''}{kw}
-                    </span>
-                  ))}
+              <div className="bg-violet-50 border border-violet-100 rounded-2xl px-4 py-3 mb-4 flex items-center gap-2">
+                <span className="text-base">🗺️</span>
+                <div>
+                  <p className="text-xs font-bold text-violet-700">학습 맵에 반영됐어요</p>
+                  <p className="text-[10px] text-violet-500 mt-0.5">
+                    {[...subjects, ...topics].filter(Boolean).slice(0, 3).join(' · ')}
+                  </p>
                 </div>
-                {newKw.length > 0 && (
-                  <button
-                    onClick={() => {
-                      setGame(prev => {
-                        const merged = Array.from(new Set([...(prev.userKeywords ?? []), ...newKw]));
-                        const g = { ...prev, userKeywords: merged };
-                        saveGame(g);
-                        return g;
-                      });
-                    }}
-                    className="w-full py-2 rounded-xl bg-violet-600 text-white text-xs font-bold active:scale-95 transition-transform"
-                  >
-                    ＋ {newKw.length}개 키워드를 내 맵에 추가
-                  </button>
-                )}
-                {newKw.length === 0 && (
-                  <p className="text-xs text-violet-500 text-center">✓ 이미 내 맵에 있는 키워드예요</p>
-                )}
               </div>
             );
           })()}

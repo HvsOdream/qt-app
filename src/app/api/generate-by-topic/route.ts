@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import { getServiceClient } from '@/lib/supabase';
 
 export const maxDuration = 60;
 
@@ -28,35 +29,24 @@ function buildSystemPrompt(grade: string, subject: string, topic: string, keywor
   return `너는 ${subject} 분야 문제 출제 전문가야.
 주제: ${topic}${ctxText}${kwText}
 
-## 출제 원칙
-- 해당 분야의 정확한 지식 기반
-- 하나의 명확한 정답만 존재
-- 매력적 오답은 학습자의 흔한 오개념에서 설계
-- 해설은 "왜 정답인지" + "왜 오답인지" 모두 포함
-- 학습자 컨텍스트에 맞는 난이도·스타일로 출제
-
-## 출력 형식
-반드시 JSON 배열로 출력. 마크다운 코드블록 없이 순수 JSON만.
-
+## 출력 형식 (JSON 배열만, 설명 금지)
 [
   {
-    "question_text": "문제 본문",
+    "question_text": "문제 내용 (전체 질문)",
     "choices": ["①선택지1", "②선택지2", "③선택지3", "④선택지4", "⑤선택지5"],
-    "correct_answer": "3",
-    "explanation": "정답 해설 (오답 이유 포함)",
-    "bloom_level": 2,
-    "question_type": "multiple_choice",
+    "correct_answer": "①선택지1",
+    "explanation": "정답 이유와 오답 분석",
     "subject": "${subject}",
     "topic": "${topic}",
-    "keywords": []
+    "keywords": ["핵심키워드1", "핵심키워드2"],
+    "difficulty": 2,
+    "bloom_level": 2,
+    "question_type": "multiple_choice"
   }
 ]
 
-## bloom_level 기준
-1 = 기억, 2 = 이해, 3 = 적용, 4 = 분석, 5 = 평가
-
-## question_type
-- multiple_choice: 4~5지선다
+## 문제 유형
+- multiple_choice: 객관식 5지선다 (기본)
 - short_answer: 단답형/주관식
 
 ## 난이도별 특성
@@ -69,6 +59,7 @@ const diffLabel: Record<number, string> = { 1: '하', 2: '중', 3: '상' };
 
 export async function POST(request: NextRequest) {
   try {
+    const deviceId = request.headers.get('x-device-id') || 'unknown';
     const { grade = '', subject, topic, keywords = [], difficulty = 2, count = 5 } = await request.json();
 
     if (!subject || !topic) {
@@ -111,8 +102,41 @@ export async function POST(request: NextRequest) {
       else { throw new Error('JSON 파싱 실패: ' + textContent.text.slice(0, 100)); }
     }
 
+    // ─── question_bank에 저장 ───
+    let savedProblems = generated;
+    try {
+      const supabase = getServiceClient();
+      const batchId = crypto.randomUUID();
+      const rows = generated.map(q => ({
+        question_text: q.question_text,
+        choices: q.choices || [],
+        correct_answer: q.correct_answer,
+        explanation: (q.explanation as string) || null,
+        subject: (q.subject as string) || subject,
+        topic: (q.topic as string) || topic,
+        keywords: (q.keywords as string[]) || keywords,
+        difficulty: (q.difficulty as number) || difficulty,
+        bloom_level: (q.bloom_level as number) || 2,
+        question_type: (q.question_type as string) || 'multiple_choice',
+        source: 'ai_topic',
+        generation_batch_id: batchId,
+        device_id: deviceId,
+      }));
+      const { data: bankData, error: bankError } = await supabase
+        .from('question_bank')
+        .insert(rows)
+        .select();
+      if (bankError) {
+        console.error('question_bank 저장 실패(generate-by-topic):', bankError);
+      } else if (bankData) {
+        savedProblems = bankData;
+      }
+    } catch (dbErr) {
+      console.error('question_bank 저장 예외:', dbErr);
+    }
+
     return NextResponse.json({
-      problems: generated,
+      problems: savedProblems,
       source: 'ai_generated',
       meta: { grade, subject, topic, keywords, difficulty },
     });
