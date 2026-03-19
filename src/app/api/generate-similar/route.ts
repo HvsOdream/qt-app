@@ -190,33 +190,40 @@ JSON 배열로만 출력해.`;
     let savedProblems = generated;
 
     try {
-      const rows = generated.map((q: Record<string, unknown>) => ({
-        question_text: q.question_text,
-        choices: q.choices || [],
-        correct_answer: q.correct_answer,
-        explanation: q.explanation || null,
-        subject: q.subject || originalProblem.subject || null,
-        topic: q.topic || originalProblem.topic || null,
-        keywords: q.keywords || originalProblem.keywords || [],
-        difficulty: q.difficulty || difficulty || 2,
-        bloom_level: q.bloom_level || 2,
-        question_type: q.question_type || 'multiple_choice',
-        source: 'ai_generated',
-        parent_wrong_answer_id: wrongAnswerId,
-        generation_batch_id: batchId,
-        device_id: deviceId,
-      }));
+      const makeRows = (includeDeviceId: boolean) =>
+        generated.map((q: Record<string, unknown>) => ({
+          question_text: q.question_text,
+          choices: q.choices || [],
+          correct_answer: q.correct_answer,
+          explanation: q.explanation || null,
+          subject: q.subject || originalProblem.subject || null,
+          topic: q.topic || originalProblem.topic || null,
+          keywords: q.keywords || originalProblem.keywords || [],
+          difficulty: q.difficulty || difficulty || 2,
+          bloom_level: q.bloom_level || 2,
+          question_type: q.question_type || 'multiple_choice',
+          source: 'ai_generated',
+          parent_wrong_answer_id: wrongAnswerId,
+          generation_batch_id: batchId,
+          ...(includeDeviceId ? { device_id: deviceId } : {}),
+        }));
 
-      const { data: bankData, error: bankError } = await supabase
+      let { data: bankData, error: bankError } = await supabase
         .from('question_bank')
-        .insert(rows)
+        .insert(makeRows(true))
         .select();
+
+      // device_id 컬럼 미존재 시 컬럼 없이 재시도
+      if (bankError && (bankError.message?.includes('device_id') || bankError.code === '42703')) {
+        console.warn('device_id 컬럼 없음 — 재시도 (마이그레이션 필요)');
+        const retry = await supabase.from('question_bank').insert(makeRows(false)).select();
+        bankData = retry.data;
+        bankError = retry.error;
+      }
 
       if (bankError) {
         console.error('question_bank 저장 실패:', bankError);
-        // DB 저장 실패해도 생성된 문제는 반환 (id 없이)
       } else if (bankData) {
-        // DB에서 받은 id를 포함한 데이터로 교체
         savedProblems = bankData;
       }
     } catch (bankDbError) {

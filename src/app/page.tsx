@@ -1172,25 +1172,37 @@ export default function Home() {
                     );
                     const bankData = await bankRes.json();
                     const templates: QuizProblem[] = bankData.problems || [];
-                    if (templates.length === 0) {
-                      alert('이 단원에 스캔된 문제가 없어요. 먼저 스캔해 주세요!');
-                      setPendingRangeLoading(false); return;
-                    }
                     setPendingRange(null); setPendingRangeLoading(false);
-                    // 2. 랜덤 템플릿 선택 후 generate-similar
-                    const template = templates[Math.floor(Math.random() * templates.length)];
                     setLoading(true); startBloomTimer(20);
-                    const genRes = await fetch('/api/generate-similar', {
-                      method: 'POST', headers: deviceHeaders(),
-                      body: JSON.stringify({ originalProblem: template, count, difficulty }),
-                    });
-                    const genData = await genRes.json();
-                    const all: QuizProblem[] = genData.problems || [];
+
+                    let all: QuizProblem[] = [];
+                    let usedSource: 'scan' | 'ai' = 'scan';
+
+                    if (templates.length > 0) {
+                      // 2a. 스캔 문제 있으면 generate-similar
+                      const template = templates[Math.floor(Math.random() * templates.length)];
+                      const genRes = await fetch('/api/generate-similar', {
+                        method: 'POST', headers: deviceHeaders(),
+                        body: JSON.stringify({ originalProblem: template, count, difficulty }),
+                      });
+                      const genData = await genRes.json();
+                      all = genData.problems || [];
+                    } else {
+                      // 2b. 스캔 문제 없으면 generate-by-topic으로 fallback (AI 생성)
+                      usedSource = 'ai';
+                      const genRes = await fetch('/api/generate-by-topic', {
+                        method: 'POST', headers: deviceHeaders(),
+                        body: JSON.stringify({ subject, topic, keywords: [], difficulty, count }),
+                      });
+                      const genData = await genRes.json();
+                      all = genData.problems || [];
+                    }
+
                     if (all.length > 0) {
                       setProblems(all); setCurrentIndex(0); setSelectedAnswer(null);
                       setShowExplanation(false); setScore({ correct: 0, total: 0 });
                       setQuizAnswers([]); setConsecutiveCorrect(0); setPreviewExpanded(null);
-                      setProblemSource('scan'); stopBloomTimer(); setMode('preview');
+                      setProblemSource(usedSource); stopBloomTimer(); setMode('preview');
                     } else { stopBloomTimer(); alert('문제 생성에 실패했습니다.'); }
                   } catch { setPendingRangeLoading(false); stopBloomTimer(); alert('오류가 발생했습니다.'); }
                   finally { setLoading(false); }

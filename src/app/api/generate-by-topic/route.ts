@@ -107,7 +107,8 @@ export async function POST(request: NextRequest) {
     try {
       const supabase = getServiceClient();
       const batchId = crypto.randomUUID();
-      const rows = generated.map(q => ({
+
+      const makeRows = (includeDeviceId: boolean) => generated.map(q => ({
         question_text: q.question_text,
         choices: q.choices || [],
         correct_answer: q.correct_answer,
@@ -120,12 +121,22 @@ export async function POST(request: NextRequest) {
         question_type: (q.question_type as string) || 'multiple_choice',
         source: 'ai_topic',
         generation_batch_id: batchId,
-        device_id: deviceId,
+        ...(includeDeviceId ? { device_id: deviceId } : {}),
       }));
-      const { data: bankData, error: bankError } = await supabase
+
+      let { data: bankData, error: bankError } = await supabase
         .from('question_bank')
-        .insert(rows)
+        .insert(makeRows(true))
         .select();
+
+      // device_id 컬럼 미존재 시 컬럼 없이 재시도
+      if (bankError && (bankError.message?.includes('device_id') || bankError.code === '42703')) {
+        console.warn('device_id 컬럼 없음 — 재시도 (마이그레이션 필요)');
+        const retry = await supabase.from('question_bank').insert(makeRows(false)).select();
+        bankData = retry.data;
+        bankError = retry.error;
+      }
+
       if (bankError) {
         console.error('question_bank 저장 실패(generate-by-topic):', bankError);
       } else if (bankData) {
