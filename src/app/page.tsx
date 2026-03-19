@@ -160,6 +160,10 @@ export default function Home() {
   >('loading');
   const [tab, setTab] = useState<'photo' | 'keyword'>('photo');
   const [keywordInput, setKeywordInput] = useState('');
+  // 홈 맵 키워드 씨앗
+  const [keywordSeedInput, setKeywordSeedInput] = useState('');
+  const [expandedKeywords, setExpandedKeywords] = useState<string[]>([]);
+  const [expandingKeywords, setExpandingKeywords] = useState(false);
   const [activeNav, setActiveNav] = useState<'home' | 'scan' | 'quest' | 'profile'>('home');
 
   // 게이미피케이션
@@ -457,6 +461,21 @@ export default function Home() {
     setPreviewExpanded(null);
   };
 
+  // ─── 키워드 확장 (홈 맵 씨앗) ───
+  const expandKeywords = async (seed: string) => {
+    if (!seed.trim()) return;
+    setExpandingKeywords(true);
+    try {
+      const res = await fetch('/api/expand-keywords', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyword: seed.trim() }),
+      });
+      const data = await res.json();
+      setExpandedKeywords(data.keywords || []);
+    } catch { /* ignore */ }
+    finally { setExpandingKeywords(false); }
+  };
+
   // ─── 문제은행 불러오기 ───
   const loadBank = async (filter?: { subject?: string; topic?: string; keyword?: string }) => {
     setBankLoading(true);
@@ -622,10 +641,24 @@ export default function Home() {
   // 로딩
   // ═══════════════════════════════════════
   if (mode === 'loading') return (
-    <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white flex items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-4xl font-black text-gray-900">Q<span className="text-violet-600">T</span></h1>
-        <p className="text-gray-600 text-sm mt-2">틀린 문제가 경험치가 되는 곳</p>
+    <div className="min-h-screen bg-gradient-to-b from-[#0a2265] to-[#1a3a8f] flex items-center justify-center">
+      <div className="text-center px-8">
+        {/* 서일대 로고 */}
+        <img
+          src="https://www.seoil.ac.kr/sites/seoil/intro/images/logo_w.png"
+          alt="서일대학교"
+          className="h-8 mx-auto mb-6 opacity-80"
+          onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+        />
+        <h1 className="text-5xl font-black text-white tracking-tight">
+          Bloom<span className="text-yellow-300">Lens</span>
+        </h1>
+        <p className="text-blue-200 text-sm mt-3 font-medium">센서인은 BloomLens로 성장한다</p>
+        <div className="mt-8 flex justify-center gap-1.5">
+          <div className="w-1.5 h-1.5 rounded-full bg-white/40 animate-pulse" style={{animationDelay:'0ms'}} />
+          <div className="w-1.5 h-1.5 rounded-full bg-white/40 animate-pulse" style={{animationDelay:'150ms'}} />
+          <div className="w-1.5 h-1.5 rounded-full bg-white/40 animate-pulse" style={{animationDelay:'300ms'}} />
+        </div>
       </div>
     </div>
   );
@@ -635,12 +668,16 @@ export default function Home() {
   // ═══════════════════════════════════════
   if (mode === 'onboard1') return (
     <div className="min-h-screen bg-gradient-to-b from-violet-50 to-white flex flex-col px-7 py-14">
+      <div className="text-center mb-6">
+        <span className="text-xs font-bold text-[#0a2265] tracking-widest opacity-60">SEOIL UNIVERSITY · S-AID</span>
+        <h1 className="text-2xl font-black text-gray-900 mt-1">Bloom<span className="text-violet-600">Lens</span></h1>
+      </div>
       <div className="flex-1 flex flex-col items-center justify-center">
         <div className="text-6xl mb-2">📸</div>
-        <div className="text-3xl mt-1">→ 🧠 → ✍️</div>
+        <div className="text-3xl mt-1">→ 🧠 → 🗺️</div>
       </div>
       <div className="text-center mb-8">
-        <h2 className="text-xl font-extrabold text-gray-900 leading-relaxed">찍으면, AI가 분석하고<br/>새 문제를 만들어줘요</h2>
+        <h2 className="text-xl font-extrabold text-gray-900 leading-relaxed">찍으면, AI가 분석하고<br/>내 학습 맵이 자라요</h2>
         <p className="text-sm text-gray-500 mt-3">시험지든 워크북이든, 과목 상관없이<br/><span className="text-violet-600 font-semibold">사진 한 장</span>이면 충분해요</p>
       </div>
       <div className="flex gap-2 justify-center mb-5">
@@ -740,15 +777,20 @@ export default function Home() {
   if (mode === 'home') return (
     <SwipeWrap><div className="min-h-screen bg-gradient-to-b from-violet-50 to-white pb-20">
       <div className="max-w-xl mx-auto px-4 pt-6">
-        {/* 헤더 — 키워드 맵 카운트 */}
+        {/* 헤더 — BloomLens + 키워드 맵 카운트 */}
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-violet-600 to-violet-400 flex items-center justify-center text-base shadow-md shadow-violet-200">🗺️</div>
+            <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-[#0a2265] to-[#1a3a8f] flex items-center justify-center text-base shadow-md shadow-blue-200">
+              <span className="text-white text-xs font-black">BL</span>
+            </div>
             <div>
-              <div className="text-sm font-bold text-gray-900">내 학습 맵</div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-black text-gray-900">Bloom<span className="text-violet-600">Lens</span></span>
+                <span className="text-[9px] font-bold text-[#0a2265]/50 bg-[#0a2265]/5 px-1.5 py-0.5 rounded tracking-wider">S-AID</span>
+              </div>
               <div className="text-xs text-violet-500">
                 {(game.userKeywords?.length ?? 0) === 0
-                  ? '아직 키워드 없음'
+                  ? '첫 키워드를 심어보세요'
                   : `${game.userKeywords.length}개 키워드 탐색 중`}
               </div>
             </div>
@@ -766,10 +808,69 @@ export default function Home() {
           <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle, #7c3aed 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
 
           {(game.userKeywords?.length ?? 0) === 0 ? (
-            <div className="text-center relative z-10 py-4">
-              <div className="text-4xl mb-3 opacity-25">🗺️</div>
-              <p className="text-sm text-gray-400 font-medium mb-1">아직 탐험한 키워드가 없어요</p>
-              <p className="text-xs text-gray-300">문제를 풀면 키워드가 맵에 쌓여요</p>
+            <div className="relative z-10">
+              {expandedKeywords.length === 0 && !expandingKeywords ? (
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 mb-2 text-center">🌱 첫 번째 키워드를 심어보세요</p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={keywordSeedInput}
+                      onChange={e => setKeywordSeedInput(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && expandKeywords(keywordSeedInput)}
+                      placeholder="예: 광합성, 이차방정식..."
+                      className="flex-1 px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:border-violet-400 focus:bg-white"
+                    />
+                    <button
+                      onClick={() => expandKeywords(keywordSeedInput)}
+                      disabled={!keywordSeedInput.trim()}
+                      className="px-3 py-2 rounded-xl bg-violet-600 text-white text-sm font-bold disabled:bg-gray-200 disabled:text-gray-400 transition-colors"
+                    >🌱</button>
+                  </div>
+                  <p className="text-[10px] text-gray-300 text-center mt-2">AI가 관련 키워드를 추천해줄게요</p>
+                </div>
+              ) : expandingKeywords ? (
+                <div className="text-center py-4">
+                  <span className="inline-block animate-spin text-2xl">🌱</span>
+                  <p className="text-xs text-violet-500 mt-2">키워드 맵을 펼치는 중...</p>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-xs font-semibold text-violet-600 mb-2">✨ &quot;{keywordSeedInput}&quot; 관련 키워드</p>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {[keywordSeedInput, ...expandedKeywords].map(kw => (
+                      <button
+                        key={kw}
+                        onClick={() => {
+                          setGame(prev => {
+                            const merged = Array.from(new Set([...(prev.userKeywords ?? []), kw]));
+                            const g = { ...prev, userKeywords: merged };
+                            saveGame(g);
+                            return g;
+                          });
+                        }}
+                        className="bg-violet-50 border border-violet-200 rounded-xl px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-100 active:scale-95 transition-all"
+                      >
+                        ＋ {kw}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => {
+                      setGame(prev => {
+                        const all = [keywordSeedInput, ...expandedKeywords];
+                        const merged = Array.from(new Set([...(prev.userKeywords ?? []), ...all]));
+                        const g = { ...prev, userKeywords: merged };
+                        saveGame(g);
+                        return g;
+                      });
+                      setExpandedKeywords([]);
+                      setKeywordSeedInput('');
+                    }}
+                    className="w-full py-2 rounded-xl bg-violet-600 text-white text-xs font-bold"
+                  >전체 추가 ({1 + expandedKeywords.length}개)</button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="relative z-10 w-full">
