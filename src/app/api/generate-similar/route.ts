@@ -154,17 +154,35 @@ JSON 배열로만 출력해.`;
     const arrayMatch = jsonText.match(/\[[\s\S]*\]/);
     if (arrayMatch) jsonText = arrayMatch[0];
 
+    // 2.5) 수식 특수문자로 인한 JSON 파싱 오류 방지
+    // 문자열 내부의 <, > 를 유니코드 전각 문자로 치환 (JSON 파싱 깨짐 방지)
+    const sanitizeForJson = (raw: string): string => {
+      // JSON 문자열 값 내부의 < > 만 치환 (키/구조 제외)
+      return raw.replace(/"([^"\\]*(\\.[^"\\]*)*)"/g, (match) => {
+        return match.replace(/(?<!\\)</g, '＜').replace(/(?<!\\)>/g, '＞');
+      });
+    };
+
     // 3) 파싱 시도
     let generated: Record<string, unknown>[];
     try {
       generated = JSON.parse(jsonText);
     } catch {
-      // 4) 실패 시 단일 객체일 수도 있으므로 배열로 감싸서 재시도
-      const objMatch = textContent.text.match(/\{[\s\S]*\}/);
-      if (objMatch) {
-        generated = [JSON.parse(objMatch[0])];
-      } else {
-        throw new Error('JSON 파싱 실패: ' + textContent.text.slice(0, 100));
+      // 4) 수식 특수문자 치환 후 재시도
+      try {
+        generated = JSON.parse(sanitizeForJson(jsonText));
+      } catch {
+        // 5) 단일 객체일 수도 있으므로 배열로 감싸서 재시도
+        const objMatch = textContent.text.match(/\{[\s\S]*\}/);
+        if (objMatch) {
+          try {
+            generated = [JSON.parse(objMatch[0])];
+          } catch {
+            generated = [JSON.parse(sanitizeForJson(objMatch[0]))];
+          }
+        } else {
+          throw new Error('JSON 파싱 실패: ' + textContent.text.slice(0, 200));
+        }
       }
     }
 

@@ -89,17 +89,31 @@ export async function POST(request: NextRequest) {
     }
 
     let jsonText = textContent.text.trim();
-    // JSON 파싱 4단계 강화
     jsonText = jsonText.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
     const arrayMatch = jsonText.match(/\[[\s\S]*\]/);
     if (arrayMatch) jsonText = arrayMatch[0];
+
+    // 수식 특수문자로 인한 JSON 파싱 오류 방지 (< > → ＜ ＞)
+    const sanitizeForJson = (raw: string): string =>
+      raw.replace(/"([^"\\]*(\\.[^"\\]*)*)"/g, (match) =>
+        match.replace(/(?<!\\)</g, '＜').replace(/(?<!\\)>/g, '＞')
+      );
+
     let generated: Record<string, unknown>[];
     try {
       generated = JSON.parse(jsonText);
     } catch {
-      const objMatch = textContent.text.match(/\{[\s\S]*\}/);
-      if (objMatch) { generated = [JSON.parse(objMatch[0])]; }
-      else { throw new Error('JSON 파싱 실패: ' + textContent.text.slice(0, 100)); }
+      try {
+        generated = JSON.parse(sanitizeForJson(jsonText));
+      } catch {
+        const objMatch = textContent.text.match(/\{[\s\S]*\}/);
+        if (objMatch) {
+          try { generated = [JSON.parse(objMatch[0])]; }
+          catch { generated = [JSON.parse(sanitizeForJson(objMatch[0]))]; }
+        } else {
+          throw new Error('JSON 파싱 실패: ' + textContent.text.slice(0, 200));
+        }
+      }
     }
 
     // ─── question_bank에 저장 ───
