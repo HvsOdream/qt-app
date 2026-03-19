@@ -215,6 +215,9 @@ export default function Home() {
   const [parsing, setParsing] = useState(false);
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
   const [selectedParsedIdx, setSelectedParsedIdx] = useState<number[]>([]);
+  const [showCategoryConfirm, setShowCategoryConfirm] = useState(false);
+  const [editSubject, setEditSubject] = useState('');
+  const [editTopic, setEditTopic] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);       // 카메라 촬영
   const galleryInputRef = useRef<HTMLInputElement>(null);    // 갤러리 선택
 
@@ -398,22 +401,29 @@ export default function Home() {
   };
 
   // ─── 유사 문제 생성 (병렬) ───
-  const generateSimilar = async () => {
+  const generateSimilar = async (overrideSubject?: string, overrideTopic?: string) => {
     if (!parseResult || selectedParsedIdx.length === 0) return;
     setLoading(true);
-    // 예상 시간: 문제 1개당 약 12초, 병렬이므로 최대 1개 기준
     startBloomTimer(15);
     try {
-      // 순차 → Promise.all 병렬 처리
       const results = await Promise.all(
         selectedParsedIdx.map(idx => {
           const original = parseResult.problems[idx];
+          // subject/topic override 적용
+          const problem = {
+            ...original,
+            ...(overrideSubject ? { subject: overrideSubject } : {}),
+            ...(overrideTopic ? { topic: overrideTopic } : {}),
+          };
           return fetch('/api/generate-similar', {
             method: 'POST', headers: deviceHeaders(),
-            body: JSON.stringify({ originalProblem: original, count: Math.max(1, Math.floor(count / selectedParsedIdx.length)), difficulty }),
+            body: JSON.stringify({ originalProblem: problem, count: Math.max(1, Math.floor(count / selectedParsedIdx.length)), difficulty }),
           }).then(async r => {
             const d = await r.json();
-            if (!r.ok) console.error('generate-similar 오류:', d.error);
+            if (!r.ok) {
+              console.error('generate-similar 오류:', d.error);
+              throw new Error(d.error || '생성 실패');
+            }
             return d;
           }).catch(e => { console.error('네트워크 오류:', e); return { problems: [] }; });
         })
@@ -428,11 +438,12 @@ export default function Home() {
         setMode('preview');
       } else {
         stopBloomTimer();
-        alert('문제 생성에 실패했습니다. 다시 시도해주세요.');
+        alert('문제 생성에 실패했습니다. 잠시 후 다시 시도해주세요.');
       }
-    } catch {
+    } catch (err) {
       stopBloomTimer();
-      alert('문제 생성에 실패했습니다.');
+      const msg = err instanceof Error ? err.message : '알 수 없는 오류';
+      alert(`문제 생성 실패: ${msg}`);
     }
     finally { setLoading(false); }
   };
@@ -1202,6 +1213,51 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* ── 카테고리 확인 모달 (연습 시작 전) ── */}
+      {showCategoryConfirm && (
+        <div className="fixed inset-0 z-[160] flex items-end" onClick={() => setShowCategoryConfirm(false)}>
+          <div className="w-full max-w-xl mx-auto bg-white rounded-t-3xl p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-5" />
+            <h3 className="text-base font-extrabold text-gray-900 mb-1">📚 단원 확인</h3>
+            <p className="text-xs text-gray-500 mb-4">AI가 감지한 단원이에요. 수정하면 학습 맵에 정확히 반영돼요.</p>
+            <div className="space-y-3 mb-5">
+              <div>
+                <label className="text-xs font-semibold text-gray-600 mb-1 block">과목</label>
+                <input
+                  value={editSubject}
+                  onChange={e => setEditSubject(e.target.value)}
+                  placeholder="예: 수학, 영어, 과학"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-violet-400"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-600 mb-1 block">단원 / 주제</label>
+                <input
+                  value={editTopic}
+                  onChange={e => setEditTopic(e.target.value)}
+                  placeholder="예: 중2 일차부등식, 1단원 만남과 관계"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-violet-400"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setShowCategoryConfirm(false)}
+                className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-semibold text-sm">
+                취소
+              </button>
+              <button
+                onClick={() => {
+                  setShowCategoryConfirm(false);
+                  generateSimilar(editSubject || undefined, editTopic || undefined);
+                }}
+                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold text-sm active:scale-95 transition-transform shadow-lg shadow-violet-300/30">
+                ⚡ 이 단원으로 생성
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div></div>
   );
 
@@ -1411,7 +1467,18 @@ export default function Home() {
           </div>
         </div>
 
-        <button onClick={generateSimilar} disabled={selectedParsedIdx.length === 0 || loading}
+        <button
+          onClick={() => {
+            if (selectedParsedIdx.length === 0) return;
+            // 선택된 문제들의 subject/topic 감지
+            const sel = selectedParsedIdx.map(i => parseResult.problems[i]);
+            const subjects = Array.from(new Set(sel.map(p => p.subject).filter(Boolean)));
+            const topics = Array.from(new Set(sel.map(p => p.topic).filter(Boolean)));
+            setEditSubject(subjects[0] || '');
+            setEditTopic(topics[0] || '');
+            setShowCategoryConfirm(true);
+          }}
+          disabled={selectedParsedIdx.length === 0 || loading}
           className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold disabled:bg-gray-200 disabled:text-gray-400 transition-colors">
           {loading ? <span><span className="inline-block animate-spin mr-2">⏳</span>유사 문제 생성 중...</span> : `⚡ ${selectedParsedIdx.length}문제로 연습 시작`}
         </button>
