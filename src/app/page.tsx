@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { signOut } from '@/lib/supabase';
 
 // ─── 타입 ───
 interface ParsedProblem {
@@ -694,7 +695,7 @@ export default function Home() {
             { id: 'home' as const, icon: '🏠', label: '홈', action: () => { setMode('home'); setActiveNav('home'); } },
             { id: 'scan' as const, icon: '📷', label: '스캔', action: () => { setMode('scan'); setActiveNav('scan'); } },
             { id: 'quest' as const, icon: '📦', label: '문제은행', action: () => { loadBank(); setMode('bank'); setActiveNav('quest'); } },
-            { id: 'profile' as const, icon: '👤', label: '내 정보', action: () => { setMode('profile'); setActiveNav('profile'); loadWrongNote(); } },
+            { id: 'profile' as const, icon: '👤', label: '내 정보', action: () => { setMode('profile'); setActiveNav('profile'); loadWrongNote(); setProfileTab('stats'); } },
           ].map(n => (
             <button key={n.id} onClick={n.action} className={`flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl transition-all ${activeNav === n.id ? 'text-violet-600 bg-violet-50' : 'text-gray-400 hover:text-gray-600'}`}>
               <span className="text-lg">{n.icon}</span>
@@ -996,11 +997,35 @@ export default function Home() {
                 {game.userKeywords.map(kw => (
                   <button
                     key={kw}
-                    onClick={() => { loadBank({ keyword: kw }); setBankFilter({ keyword: kw }); setMode('bank'); setActiveNav('quest'); }}
+                    onClick={() => {
+                      // 키워드를 과목/단원으로 설정하고 바로 문제 생성
+                      setHomeSubject(game.studySubject || kw);
+                      setHomeUnit(kw);
+                      setHomeGrade(game.studyGrade || '');
+                      setShowGoalModal(false);
+                      // generateFromGoal은 state 반영 후 실행해야 해서 setTimeout
+                      setTimeout(() => {
+                        const topic = kw;
+                        setLoading(true); startBloomTimer(15);
+                        fetch('/api/generate-by-topic', {
+                          method: 'POST', headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ grade: game.studyGrade || '', subject: game.studySubject || kw, topic, difficulty, count }),
+                        }).then(r => r.json()).then(data => {
+                          const all: QuizProblem[] = data.problems || [];
+                          if (all.length > 0) {
+                            setProblems(all); setCurrentIndex(0); setSelectedAnswer(null);
+                            setShowExplanation(false); setScore({ correct: 0, total: 0 });
+                            setQuizAnswers([]); setConsecutiveCorrect(0); setPreviewExpanded(null);
+                            stopBloomTimer(); setMode('preview');
+                          } else { stopBloomTimer(); alert('문제 생성에 실패했습니다.'); }
+                        }).catch(() => { stopBloomTimer(); alert('오류'); })
+                          .finally(() => setLoading(false));
+                      }, 0);
+                    }}
                     className="bg-violet-50 border border-violet-200 rounded-xl px-3 py-2 text-left hover:bg-violet-100 active:scale-95 transition-all"
                   >
                     <div className="text-xs font-bold text-violet-700">{kw}</div>
-                    <div className="text-[10px] text-violet-400 mt-0.5">탭해서 풀기</div>
+                    <div className="text-[10px] text-violet-400 mt-0.5">✨ 문제 만들기</div>
                   </button>
                 ))}
               </div>
@@ -1017,6 +1042,10 @@ export default function Home() {
           <button onClick={() => { loadBank(); setMode('bank'); setActiveNav('quest'); }}
             className="flex-1 py-3 rounded-xl bg-white border border-gray-200 text-gray-600 font-medium text-sm active:scale-[0.98] transition-transform shadow-sm">
             📦 문제은행
+          </button>
+          <button onClick={() => { loadWrongNote(); setProfileTab('wrongnote'); setMode('profile'); setActiveNav('profile'); }}
+            className="flex-1 py-3 rounded-xl bg-red-50 border border-red-100 text-red-500 font-medium text-sm active:scale-[0.98] transition-transform shadow-sm relative">
+            ❌ 오답노트
           </button>
         </div>
       </div>
@@ -1916,6 +1945,43 @@ export default function Home() {
             )}
           </>
         )}
+
+        {/* ── 설정 섹션 (항상 표시) ── */}
+        <div className="mt-6 bg-white shadow-sm border border-gray-100 rounded-2xl overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-gray-50">
+            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">설정 / MVP</span>
+          </div>
+          <button
+            onClick={async () => {
+              if (!confirm('로그아웃 하시겠어요?')) return;
+              await signOut();
+              window.location.reload();
+            }}
+            className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 active:bg-gray-100 transition-colors border-b border-gray-50">
+            <span className="text-sm text-gray-700">🚪 로그아웃</span>
+            <span className="text-xs text-gray-300">→</span>
+          </button>
+          <button
+            onClick={async () => {
+              if (!confirm('⚠️ 모든 학습 데이터(문제은행 + 퀴즈 기록)를 삭제합니다.\n정말 초기화하시겠어요?')) return;
+              try {
+                const res = await fetch('/api/reset-db', { method: 'DELETE' });
+                const data = await res.json();
+                if (data.ok) {
+                  // 로컬 게임 상태도 리셋
+                  localStorage.removeItem('qt_game');
+                  alert('초기화 완료! 앱을 다시 시작합니다.');
+                  window.location.reload();
+                } else {
+                  alert('초기화 실패: ' + (data.error || '알 수 없는 오류'));
+                }
+              } catch { alert('초기화 중 오류가 발생했습니다.'); }
+            }}
+            className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-red-50 active:bg-red-100 transition-colors">
+            <span className="text-sm text-red-500">🗑️ 데이터 전체 초기화</span>
+            <span className="text-xs text-red-300">삭제 불가</span>
+          </button>
+        </div>
       </div>
       <BottomNav />
       <DotIndicator />
