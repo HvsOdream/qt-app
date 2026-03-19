@@ -164,6 +164,7 @@ export default function Home() {
   const [keywordSeedInput, setKeywordSeedInput] = useState('');
   const [expandedKeywords, setExpandedKeywords] = useState<string[]>([]);
   const [expandingKeywords, setExpandingKeywords] = useState(false);
+  const [expandError, setExpandError] = useState(false);
   const [activeNav, setActiveNav] = useState<'home' | 'scan' | 'quest' | 'profile'>('home');
 
   // 게이미피케이션
@@ -465,14 +466,21 @@ export default function Home() {
   const expandKeywords = async (seed: string) => {
     if (!seed.trim()) return;
     setExpandingKeywords(true);
+    setExpandError(false);
     try {
       const res = await fetch('/api/expand-keywords', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ keyword: seed.trim() }),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setExpandedKeywords(data.keywords || []);
-    } catch { /* ignore */ }
+      const kws: string[] = data.keywords || [];
+      if (kws.length === 0) throw new Error('empty');
+      setExpandedKeywords(kws);
+    } catch (e) {
+      console.error('expand-keywords 오류:', e);
+      setExpandError(true);
+    }
     finally { setExpandingKeywords(false); }
   };
 
@@ -802,7 +810,7 @@ export default function Home() {
                     <input
                       type="text"
                       value={keywordSeedInput}
-                      onChange={e => setKeywordSeedInput(e.target.value)}
+                      onChange={e => { setKeywordSeedInput(e.target.value); setExpandError(false); }}
                       onKeyDown={e => e.key === 'Enter' && expandKeywords(keywordSeedInput)}
                       placeholder="예: 광합성, 이차방정식..."
                       className="flex-1 px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:border-violet-400 focus:bg-white"
@@ -813,7 +821,11 @@ export default function Home() {
                       className="px-3 py-2 rounded-xl bg-violet-600 text-white text-sm font-bold disabled:bg-gray-200 disabled:text-gray-400 transition-colors"
                     >🌱</button>
                   </div>
-                  <p className="text-[10px] text-gray-300 text-center mt-2">AI가 관련 키워드를 추천해줄게요</p>
+                  {expandError ? (
+                    <p className="text-[10px] text-red-400 text-center mt-2">⚠️ API 오류 — 다시 시도해주세요</p>
+                  ) : (
+                    <p className="text-[10px] text-gray-300 text-center mt-2">AI가 관련 키워드를 추천해줄게요</p>
+                  )}
                 </div>
               ) : expandingKeywords ? (
                 <div className="text-center py-4">
