@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { getServiceClient } from '@/lib/supabase';
+export const maxDuration = 60;
+
 
 function buildSystemPrompt(unitTitle?: string, unitCode?: string): string {
   const context = unitTitle ? `\n현재 출제 범위: ${unitTitle} (${unitCode || ''})` : '';

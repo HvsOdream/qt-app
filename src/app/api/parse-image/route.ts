@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 
+export const maxDuration = 60;
+
 const PARSE_PROMPT = `너는 시험 문제 분석 전문가야. 학생이 문제 사진을 업로드하면, 문제를 정확히 파싱해서 구조화된 JSON으로 반환해.
 
 ## 파싱 규칙

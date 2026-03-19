@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 
+export const maxDuration = 60;
+
 // 오답 기반 동적 주제로 문제 생성 (units 테이블 불필요)
 function buildSystemPrompt(subject: string, topic: string, keywords: string[]): string {
   const kwText = keywords.length > 0 ? `\n핵심 키워드: ${keywords.join(', ')}` : '';

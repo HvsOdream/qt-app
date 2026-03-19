@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { getServiceClient } from '@/lib/supabase';
 
+export const maxDuration = 60;
+
 const SYSTEM_PROMPT = `너는 시험 문제 출제 전문가야. 학생이 틀린 문제를 기반으로 같은 개념의 유사 문제를 생성한다.
 
 ## 출제 원칙
