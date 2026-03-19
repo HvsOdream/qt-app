@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "BloomLens — AI 학습 맵",
-  description: "센서인은 BloomLens로 성장한다. 시험지를 찍으면 AI가 학습 맵을 키워줘요.",
+  title: "BloomLens — AI 개인화 학습 도구",
+  description: "센서인은 BloomLens로 성장한다. 시험지를 찍으면 AI 개인화 학습 도구가 도와줘요.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
