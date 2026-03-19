@@ -1,6 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServiceClient } from '@/lib/supabase';
 
+// 과목/주제 요약 서버사이드 캐시 (5분 TTL)
+let summaryCache: Record<string, Record<string, number>> | null = null;
+let summaryCachedAt = 0;
+const SUMMARY_TTL_MS = 5 * 60 * 1000; // 5분
+
+async function getCategoryMap(): Promise<Record<string, Record<string, number>>> {
+  const now = Date.now();
+  if (summaryCache && now - summaryCachedAt < SUMMARY_TTL_MS) {
+    return summaryCache;
+  }
+  const supabase = getServiceClient();
+  const { data: summary } = await supabase
+    .from('question_bank')
+    .select('subject, topic');
+
+  const categoryMap: Record<string, Record<string, number>> = {};
+  if (summary) {
+    for (const row of summary) {
+      const s = row.subject || '미분류';
+      const t = row.topic || '미분류';
+      if (!categoryMap[s]) categoryMap[s] = {};
+      categoryMap[s][t] = (categoryMap[s][t] || 0) + 1;
+    }
+  }
+  summaryCache = categoryMap;
+  summaryCachedAt = now;
+  return categoryMap;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -10,6 +39,7 @@ export async function GET(request: NextRequest) {
     const keyword = searchParams.get('keyword');
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
+    const skipSummary = searchParams.get('skipSummary') === 'true';
 
     const supabase = getServiceClient();
 
@@ -25,32 +55,21 @@ export async function GET(request: NextRequest) {
 
     query = query.range(offset, offset + limit - 1);
 
-    const { data, error, count } = await query;
+    // 문제 목록 + 카테고리 요약 병렬 요청
+    const [{ data, error, count }, categoryMap] = await Promise.all([
+      query,
+      skipSummary ? Promise.resolve(null) : getCategoryMap(),
+    ]);
 
     if (error) {
       console.error('question_bank 조회 오류:', error);
       return NextResponse.json({ error: '문제은행 조회 실패' }, { status: 500 });
     }
 
-    // 과목/주제별 카운트 (요약용)
-    const { data: summary } = await supabase
-      .from('question_bank')
-      .select('subject, topic');
-
-    const categoryMap: Record<string, Record<string, number>> = {};
-    if (summary) {
-      for (const row of summary) {
-        const s = row.subject || '미분류';
-        const t = row.topic || '미분류';
-        if (!categoryMap[s]) categoryMap[s] = {};
-        categoryMap[s][t] = (categoryMap[s][t] || 0) + 1;
-      }
-    }
-
     return NextResponse.json({
       problems: data || [],
       total: count || 0,
-      categories: categoryMap,
+      categories: categoryMap ?? undefined,
     });
   } catch (error) {
     console.error('question_bank API 오류:', error);

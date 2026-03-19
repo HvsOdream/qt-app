@@ -562,17 +562,20 @@ export default function Home() {
 
 
   // ─── 문제은행 불러오기 ───
-  const loadBank = async (filter?: { subject?: string; topic?: string; keyword?: string }) => {
+  const loadBank = async (filter?: { subject?: string; topic?: string; keyword?: string }, forceRefreshCategories = false) => {
     setBankLoading(true);
     try {
       const params = new URLSearchParams();
       if (filter?.subject) params.set('subject', filter.subject);
       if (filter?.topic) params.set('topic', filter.topic);
       if (filter?.keyword) params.set('keyword', filter.keyword);
+      // bankCategories가 이미 로드된 경우 summary 쿼리 스킵 (성능 최적화)
+      const hasCats = Object.keys(bankCategories).length > 0;
+      if (hasCats && !forceRefreshCategories) params.set('skipSummary', 'true');
       const res = await fetch(`/api/question-bank?${params.toString()}`);
       const data = await res.json();
       setBankProblems(data.problems || []);
-      setBankCategories(data.categories || {});
+      if (data.categories) setBankCategories(data.categories);
       setBankTotal(data.total || 0);
     } catch { /* ignore */ }
     finally { setBankLoading(false); }
