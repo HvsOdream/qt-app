@@ -864,7 +864,7 @@ export default function Home() {
           <h1 className="text-5xl font-black text-white tracking-tight">
             Bloom<span className="text-yellow-300">Lens</span>
           </h1>
-          <p className="text-blue-200 text-sm mt-2">AI 학습 맵으로 내신을 정복하자</p>
+          <p className="text-blue-200 text-sm mt-2">서일대학교만의 특별한 AI 학습법</p>
         </div>
 
         {loginSent ? (
