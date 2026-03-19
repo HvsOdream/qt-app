@@ -164,9 +164,10 @@ export default function Home() {
   const [tab, setTab] = useState<'photo' | 'keyword'>('photo');
   const [keywordInput, setKeywordInput] = useState('');
   // 홈 문제 생성 입력
-  const [homeGrade, setHomeGrade] = useState('');      // 학년/상황
-  const [homeSubject, setHomeSubject] = useState('');  // 과목/전공
-  const [homeUnit, setHomeUnit] = useState('');        // 단원 (선택)
+  const [homeGrade, setHomeGrade] = useState('');
+  const [homeSubject, setHomeSubject] = useState('');
+  const [homeUnit, setHomeUnit] = useState('');
+  const [showGoalModal, setShowGoalModal] = useState(false);  // 바텀시트
   const [activeNav, setActiveNav] = useState<'home' | 'scan' | 'quest' | 'profile'>('home');
   // 꽃 피는 로딩
   const [bloomStage, setBloomStage] = useState(0);
@@ -940,94 +941,18 @@ export default function Home() {
           <XpBar />
         </div>
 
-        {/* 📚 문제 만들기 카드 */}
-        <div className="bg-white shadow-sm border border-violet-100 rounded-2xl p-4 mb-4">
-          <div className="flex items-center gap-1.5 mb-3">
-            <span className="text-sm font-bold text-gray-900">📚 오늘 뭘 공부할까요?</span>
-          </div>
-
-          {/* 학년/상황 */}
-          <div className="mb-2">
-            <label className="text-[10px] text-gray-400 font-medium mb-1 block">학년 / 상황</label>
-            <input
-              type="text"
-              value={homeGrade}
-              onChange={e => setHomeGrade(e.target.value)}
-              placeholder="고2, 대학교 3학년, 정보처리기사..."
-              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:border-violet-400 focus:bg-white transition-colors"
-            />
-            {/* 빠른 선택 칩 */}
-            <div className="flex gap-1.5 mt-1.5 flex-wrap">
-              {['고1', '고2', '고3', '대학교', '자격증'].map(g => (
-                <button key={g} onClick={() => setHomeGrade(g)}
-                  className={`text-[10px] px-2.5 py-1 rounded-lg border transition-colors ${homeGrade === g ? 'bg-violet-600 text-white border-violet-600' : 'bg-gray-50 text-gray-500 border-gray-200 hover:border-violet-300'}`}>
-                  {g}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* 과목/전공 */}
-          <div className="mb-2">
-            <label className="text-[10px] text-gray-400 font-medium mb-1 block">과목 / 전공</label>
-            <input
-              type="text"
-              value={homeSubject}
-              onChange={e => setHomeSubject(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && homeSubject.trim()) document.getElementById('homeUnitInput')?.focus(); }}
-              placeholder="수학, 영어, 자료구조, 데이터베이스..."
-              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:border-violet-400 focus:bg-white transition-colors"
-            />
-          </div>
-
-          {/* 단원 (선택) */}
-          <div className="mb-3">
-            <label className="text-[10px] text-gray-400 font-medium mb-1 block">단원 <span className="text-gray-300">(선택 — 없으면 전범위)</span></label>
-            <input
-              id="homeUnitInput"
-              type="text"
-              value={homeUnit}
-              onChange={e => setHomeUnit(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && homeSubject.trim()) generateFromGoal(); }}
-              placeholder="이차함수, 트리, 관계형 데이터베이스..."
-              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:border-violet-400 focus:bg-white transition-colors"
-            />
-          </div>
-
-          {/* 난이도 + 문제수 */}
-          <div className="flex gap-2 mb-3">
-            <div className="flex-1">
-              <label className="text-[10px] text-gray-400 font-medium mb-1 block">난이도</label>
-              <div className="flex gap-1">
-                {[1,2,3].map(d => (
-                  <button key={d} onClick={() => setDifficulty(d)}
-                    className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${difficulty === d ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-                    {d===1?'하':d===2?'중':'상'}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="flex-1">
-              <label className="text-[10px] text-gray-400 font-medium mb-1 block">문제 수</label>
-              <div className="flex gap-1">
-                {[3,5,10].map(n => (
-                  <button key={n} onClick={() => setCount(n)}
-                    className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${count === n ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-                    {n}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <button
-            onClick={generateFromGoal}
-            disabled={!homeSubject.trim() || loading}
-            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold text-sm shadow-md shadow-violet-200 disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none active:scale-[0.98] transition-all"
-          >
-            {loading ? <span><span className="inline-block animate-spin mr-1.5">🌸</span>문제 만드는 중...</span> : '🎯 문제 만들기'}
-          </button>
-        </div>
+        {/* 🎯 오늘 공부 시작 버튼 */}
+        <button
+          onClick={() => setShowGoalModal(true)}
+          className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold text-[15px] shadow-lg shadow-violet-300/30 active:scale-[0.98] transition-transform mb-4"
+        >
+          🎯 오늘 뭘 공부할까?
+          {(game.studyGrade || game.studySubject) && (
+            <span className="ml-2 text-violet-200 text-xs font-normal">
+              {[game.studyGrade, game.studySubject].filter(Boolean).join(' · ')}
+            </span>
+          )}
+        </button>
 
         {/* 내 학습 맵 */}
         <div className="bg-white/80 backdrop-blur border border-gray-100 rounded-2xl p-4 mb-4 relative overflow-hidden">
@@ -1062,20 +987,103 @@ export default function Home() {
           </div>
         </div>
 
-        {/* CTA 버튼 */}
-        <button onClick={goScan} className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold text-[15px] shadow-lg shadow-violet-300/30 active:scale-[0.98] transition-transform mb-2">
-          📷 시험지 스캔하기
-        </button>
-        <button
-          onClick={() => { loadBank(); setMode('bank'); setActiveNav('quest'); }}
-          className="w-full py-3 rounded-xl bg-violet-50 border border-violet-200 text-violet-600 font-medium text-sm active:scale-[0.98] transition-transform"
-        >
-          📦 문제은행 바로가기
-        </button>
+        {/* 보조 CTA */}
+        <div className="flex gap-2">
+          <button onClick={goScan}
+            className="flex-1 py-3 rounded-xl bg-white border border-gray-200 text-gray-600 font-medium text-sm active:scale-[0.98] transition-transform shadow-sm">
+            📷 시험지 스캔
+          </button>
+          <button onClick={() => { loadBank(); setMode('bank'); setActiveNav('quest'); }}
+            className="flex-1 py-3 rounded-xl bg-white border border-gray-200 text-gray-600 font-medium text-sm active:scale-[0.98] transition-transform shadow-sm">
+            📦 문제은행
+          </button>
+        </div>
       </div>
       <BottomNav />
       <LevelUpModal />
       <DotIndicator />
+
+      {/* 바텀시트 — 오늘 공부 설정 */}
+      {showGoalModal && (
+        <div className="fixed inset-0 z-[150] flex items-end" onClick={() => setShowGoalModal(false)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div className="relative w-full bg-white rounded-t-3xl px-5 pt-4 pb-10 shadow-2xl max-h-[85vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}>
+            {/* 핸들 */}
+            <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-4" />
+            <h2 className="text-base font-extrabold text-gray-900 mb-4">📚 오늘 뭘 공부할까요?</h2>
+
+            {/* 학년/상황 */}
+            <div className="mb-3">
+              <label className="text-xs text-gray-500 font-medium mb-1.5 block">학년 / 상황</label>
+              <input type="text" value={homeGrade} onChange={e => setHomeGrade(e.target.value)}
+                placeholder="고2, 대학교 3학년, 정보처리기사..."
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:border-violet-400 focus:bg-white" />
+              <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                {['고1', '고2', '고3', '대학교', '자격증'].map(g => (
+                  <button key={g} onClick={() => setHomeGrade(g)}
+                    className={`text-xs px-3 py-1 rounded-lg border transition-colors ${homeGrade === g ? 'bg-violet-600 text-white border-violet-600' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
+                    {g}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 과목/전공 */}
+            <div className="mb-3">
+              <label className="text-xs text-gray-500 font-medium mb-1.5 block">과목 / 전공</label>
+              <input type="text" value={homeSubject} onChange={e => setHomeSubject(e.target.value)}
+                placeholder="수학, 영어, 자료구조..."
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:border-violet-400 focus:bg-white" />
+            </div>
+
+            {/* 단원 (선택) */}
+            <div className="mb-4">
+              <label className="text-xs text-gray-500 font-medium mb-1.5 block">
+                단원 <span className="text-gray-300 font-normal">— 없으면 전범위</span>
+              </label>
+              <input type="text" value={homeUnit} onChange={e => setHomeUnit(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && homeSubject.trim()) { generateFromGoal(); setShowGoalModal(false); } }}
+                placeholder="이차함수, 트리, 관계형 데이터베이스..."
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder-gray-300 focus:outline-none focus:border-violet-400 focus:bg-white" />
+            </div>
+
+            {/* 난이도 + 문제수 */}
+            <div className="flex gap-3 mb-4">
+              <div className="flex-1">
+                <label className="text-xs text-gray-500 font-medium mb-1.5 block">난이도</label>
+                <div className="flex gap-1">
+                  {[1,2,3].map(d => (
+                    <button key={d} onClick={() => setDifficulty(d)}
+                      className={`flex-1 py-2 rounded-lg text-xs font-bold transition-colors ${difficulty === d ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500'}`}>
+                      {d===1?'하':d===2?'중':'상'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex-1">
+                <label className="text-xs text-gray-500 font-medium mb-1.5 block">문제 수</label>
+                <div className="flex gap-1">
+                  {[3,5,10].map(n => (
+                    <button key={n} onClick={() => setCount(n)}
+                      className={`flex-1 py-2 rounded-lg text-xs font-bold transition-colors ${count === n ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500'}`}>
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => { generateFromGoal(); setShowGoalModal(false); }}
+              disabled={!homeSubject.trim() || loading}
+              className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold text-base shadow-lg shadow-violet-300/30 disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none active:scale-[0.98] transition-all"
+            >
+              🎯 문제 만들기
+            </button>
+          </div>
+        </div>
+      )}
     </div></div>
   );
 
@@ -1682,49 +1690,46 @@ export default function Home() {
                   </div>
                   <button
                     onClick={() => { setBankFilter({ subject }); loadBank({ subject }); }}
-                    className="mt-2 w-full py-2 rounded-lg bg-violet-50 text-violet-600 text-xs font-medium">
-                    ▶️ {subject} 전체 {Math.min(subjectTotal, 5)}문제 풀기
+                    className="mt-2 w-full py-2 rounded-lg bg-gray-50 text-gray-500 text-xs font-medium border border-gray-100">
+                    {subject} 문제 보기 →
                   </button>
                 </div>
               );
             })}
 
-            {/* 필터된 문제 목록 */}
+            {/* 필터된 문제 목록 — 1문제씩 */}
             {bankFilter.subject && bankProblems.length > 0 && (
-              <>
-                <div className="space-y-2 mb-4">
-                  {bankProblems.slice(0, 10).map((p, idx) => (
-                    <div key={p.id || idx} className="bg-white shadow-sm rounded-xl border border-gray-100 p-3">
-                      <p className="text-xs text-gray-700 leading-relaxed line-clamp-2"><MathText text={p.question_text} /></p>
-                      <div className="flex gap-1 mt-1.5">
-                        {p.topic && <span className="px-1.5 py-0.5 bg-gray-100 text-gray-400 text-[10px] rounded">{p.topic}</span>}
-                        <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-600 text-[10px] rounded">{diffLabels[p.difficulty || 2]}</span>
-                        <span className="px-1.5 py-0.5 text-gray-300 text-[10px]">
-                          {(p as QuizProblem & { times_served?: number; times_correct?: number }).times_served
-                            ? `${(p as QuizProblem & { times_correct?: number }).times_correct || 0}/${(p as QuizProblem & { times_served?: number }).times_served} 정답`
-                            : '미풀이'}
-                        </span>
+              <div className="space-y-2">
+                {bankProblems.map((p, idx) => {
+                  const served = (p as QuizProblem & { times_served?: number }).times_served ?? 0;
+                  const correct = (p as QuizProblem & { times_correct?: number }).times_correct ?? 0;
+                  const accuracy = served > 0 ? Math.round((correct / served) * 100) : null;
+                  return (
+                    <div key={p.id || idx} className="bg-white shadow-sm rounded-2xl border border-gray-100 p-3.5">
+                      <p className="text-xs text-gray-800 leading-relaxed line-clamp-2 mb-2.5">
+                        <MathText text={p.question_text} />
+                      </p>
+                      <div className="flex items-center justify-between">
+                        <div className="flex gap-1 flex-wrap">
+                          {p.topic && <span className="px-1.5 py-0.5 bg-gray-100 text-gray-400 text-[10px] rounded">{p.topic}</span>}
+                          <span className="px-1.5 py-0.5 bg-yellow-50 text-yellow-600 text-[10px] rounded border border-yellow-100">{diffLabels[p.difficulty || 2]}</span>
+                          {accuracy !== null
+                            ? <span className={`px-1.5 py-0.5 text-[10px] rounded ${accuracy >= 70 ? 'bg-green-50 text-green-500' : 'bg-red-50 text-red-400'}`}>
+                                {accuracy}% ({served}회)
+                              </span>
+                            : <span className="text-[10px] text-gray-300">미풀이</span>
+                          }
+                        </div>
+                        <button
+                          onClick={() => startBankQuiz([p])}
+                          className="ml-2 px-3 py-1.5 rounded-xl bg-violet-600 text-white text-xs font-bold active:scale-95 transition-transform flex-shrink-0">
+                          풀기 ▶
+                        </button>
                       </div>
                     </div>
-                  ))}
-                </div>
-                {/* 풀기 개수 선택 */}
-                <div className="flex gap-2 mb-3">
-                  <span className="text-xs text-gray-500 self-center">풀 문제 수:</span>
-                  {[5, 10, bankProblems.length].filter((v, i, arr) => arr.indexOf(v) === i && v > 0).map(n => (
-                    <button key={n}
-                      onClick={() => setBankPlayCount(n)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${bankPlayCount === n ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-                      {n === bankProblems.length ? `전체 (${n})` : `${n}문제`}
-                    </button>
-                  ))}
-                </div>
-                <button
-                  onClick={() => startBankQuiz(bankProblems.slice(0, Math.min(bankProblems.length, bankPlayCount)))}
-                  className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-white font-bold text-[15px] shadow-lg shadow-violet-300/30">
-                  ▶️ {Math.min(bankProblems.length, bankPlayCount)}문제 풀기
-                </button>
-              </>
+                  );
+                })}
+              </div>
             )}
           </>
         )}
