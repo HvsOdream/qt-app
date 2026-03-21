@@ -865,7 +865,7 @@ export default function Home() {
         {/* 로고 */}
         <div className="text-center mb-8">
           <img
-            src="https://www.seoil.ac.kr/sites/seoil/intro/images/logo_w.png"
+            src="https://www.seoil.ac.kr/sites/seoil/intro/images/logo50.png"
             alt="서일대학교"
             className="h-8 mx-auto mb-4 opacity-90"
             onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
@@ -1009,7 +1009,7 @@ export default function Home() {
       <div className="text-center px-8">
         {/* 서일대 로고 */}
         <img
-          src="https://www.seoil.ac.kr/sites/seoil/intro/images/logo_w.png"
+          src="https://www.seoil.ac.kr/sites/seoil/intro/images/logo50.png"
           alt="서일대학교"
           className="h-8 mx-auto mb-6 opacity-80"
           onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
