@@ -1,23 +1,20 @@
-import type { Metadata, Viewport } from "next";
+import type { Metadata } from "next";
+import localFont from "next/font/local";
 import "./globals.css";
+
+const nanum = localFont({
+  src: [
+    { path: "./fonts/NanumSquareNeoOTF-Lt.otf", weight: "300", style: "normal" },
+    { path: "./fonts/NanumSquareNeoOTF-Rg.otf", weight: "400", style: "normal" },
+    { path: "./fonts/NanumSquareNeoOTF-Bd.otf", weight: "700", style: "normal" },
+  ],
+  variable: "--font-nanum",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "BloomLens — AI 개인화 학습 도구",
-  description: "센서인은 BloomLens로 성장한다. 시험지를 찍으면 AI 개인화 학습 도구가 도와줘요.",
-  manifest: "/manifest.json",
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "black-translucent",
-    title: "BloomLens",
-  },
-};
-
-export const viewport: Viewport = {
-  themeColor: "#0a2265",
-  width: "device-width",
-  initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  description: "오답노트가 베이스, 유사문제 생성기가 도구. 서일대학교만의 특별한 AI 학습법.",
 };
 
 export default function RootLayout({
@@ -27,14 +24,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
-      <head>
-        <link
-          href="https://hangeul.pstatic.net/hangeul_static/css/nanum-square-neo.css"
-          rel="stylesheet"
-        />
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-      </head>
-      <body className="antialiased" style={{ fontFamily: "'NanumSquareNeo', sans-serif" }}>
+      <body className={`${nanum.variable} antialiased`}>
         {children}
       </body>
     </html>
