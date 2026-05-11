@@ -36,6 +36,7 @@ interface ParsedProblem {
   choices: string[];
   marked_answer: string | null;
   correct_answer: string | null;
+  explanation: string | null;
   subject: string;
   topic: string;
   question_type: string;
@@ -335,6 +336,7 @@ export default function Home() {
         choices: ci.problem.choices || [],
         question_type: ci.problem.question_type || 'multiple_choice',
         correct_answer: ci.problem.correct_answer!,
+        explanation: ci.problem.explanation || null,
         source: 'scan',
       }));
       const res = await fetch('/api/wrong-note', {
