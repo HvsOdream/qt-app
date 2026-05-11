@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 
+export const maxDuration = 60;
+
 const PARSE_PROMPT = `너는 시험 문제 분석 전문가야. 학생이 문제 사진을 업로드하면, 문제를 정확히 파싱해서 구조화된 JSON으로 반환해.
 
 ## 파싱 규칙
@@ -106,4 +108,36 @@ export async function POST(request: NextRequest) {
               },
             },
             {
-              type:
+              type: 'text',
+              text: PARSE_PROMPT,
+            },
+          ],
+        },
+      ],
+    });
+
+    const textContent = message.content[0];
+    if (textContent.type !== 'text') {
+      return NextResponse.json(
+        { error: 'API 응답 형식 오류' },
+        { status: 500 }
+      );
+    }
+
+    // JSON 파싱 (Claude가 가끔 ```json 감싸기도 하므로 정리)
+    let jsonText = textContent.text.trim();
+    if (jsonText.startsWith('```')) {
+      jsonText = jsonText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+    }
+
+    const parsed = JSON.parse(jsonText);
+
+    return NextResponse.json(parsed);
+  } catch (error) {
+    console.error('이미지 파싱 오류:', error);
+    return NextResponse.json(
+      { error: '이미지 분석 중 오류가 발생했습니다.' },
+      { status: 500 }
+    );
+  }
+}

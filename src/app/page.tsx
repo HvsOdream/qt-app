@@ -1138,4 +1138,113 @@ export default function Home() {
             </div>
           )}
 
-          {/*
+          {/* 결과 + 해설 */}
+          {showExplanation && (
+            <div className={`rounded-2xl p-4 ${
+              selectedAnswer === normalizeAnswer(item.correct_answer) || (item.question_type === 'short_answer' && isShortAnswerCorrect(selectedAnswer || '', item.correct_answer))
+                ? 'bg-emerald-50 border border-emerald-200'
+                : 'bg-red-50 border border-red-200'
+            }`}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-lg">
+                  {(selectedAnswer === normalizeAnswer(item.correct_answer)) ||
+                   (item.question_type === 'short_answer' && isShortAnswerCorrect(selectedAnswer || '', item.correct_answer))
+                    ? '✅' : '❌'}
+                </span>
+                <span className="text-sm font-bold text-slate-700">
+                  정답: <MathText text={item.correct_answer} />
+                </span>
+              </div>
+              {item.explanation && (
+                <p className="text-sm text-slate-600 leading-relaxed">
+                  <MathText text={item.explanation} />
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 다음 버튼 */}
+        {showExplanation && (
+          <div className="sticky bottom-0 bg-white border-t border-slate-100 px-4 py-3">
+            <button
+              onClick={nextProblem}
+              className="w-full bg-[#1B3F8B] text-white rounded-xl py-4 text-base font-bold hover:bg-[#163272] transition"
+            >
+              {currentIndex + 1 >= quizItems.length ? '결과 보기' : '다음 문제 →'}
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ─── 결과 ───
+  if (view === 'result') {
+    const percentage = quizItems.length > 0 ? Math.round((score.correct / quizItems.length) * 100) : 0;
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col max-w-lg mx-auto">
+        <div className="bg-white border-b border-slate-100 px-4 py-3">
+          <h1 className="font-bold text-slate-800 text-center">퀴즈 결과</h1>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4 pb-28">
+          {/* 점수 카드 */}
+          <div className="bg-[#1B3F8B] rounded-2xl p-6 text-center text-white">
+            <div className="text-5xl font-black mb-1">{percentage}점</div>
+            <div className="text-blue-200 text-sm">{score.correct} / {quizItems.length} 정답</div>
+          </div>
+
+          {/* 마스터 알림 */}
+          {newlyMastered.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-3">
+              <span className="text-2xl">🏆</span>
+              <div>
+                <p className="text-sm font-bold text-amber-700">완료 달성!</p>
+                <p className="text-xs text-amber-600">{newlyMastered.length}개 문제를 마스터했어요.</p>
+              </div>
+            </div>
+          )}
+
+          {/* 문제별 결과 */}
+          <div className="space-y-2">
+            {quizAnswers.map((qa, idx) => {
+              const item = quizItems[idx];
+              return (
+                <div key={idx} className={`bg-white rounded-xl border p-3 ${qa.isCorrect ? 'border-emerald-100' : 'border-red-100'}`}>
+                  <div className="flex items-start gap-3">
+                    <span className="text-lg flex-shrink-0">{qa.isCorrect ? '✅' : '❌'}</span>
+                    <div className="min-w-0">
+                      <p className="text-xs text-slate-400 mb-1">
+                        {item.subject}{item.topic ? ` · ${item.topic}` : ''}
+                      </p>
+                      <p className="text-sm text-slate-700 line-clamp-2">
+                        <MathText text={item.question_text} />
+                      </p>
+                      {!qa.isCorrect && (
+                        <p className="text-xs text-red-500 mt-1">
+                          내 답: {qa.studentAnswer} → 정답: <MathText text={item.correct_answer} />
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white border-t border-slate-100 px-4 py-3 z-20">
+          <button
+            onClick={() => { setSelectedIds(new Set()); setView('home'); }}
+            className="w-full bg-[#1B3F8B] text-white rounded-xl py-4 text-base font-bold hover:bg-[#163272] transition"
+          >
+            오답노트로 돌아가기
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
