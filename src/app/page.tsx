@@ -875,7 +875,8 @@ export default function Home() {
               )}
             </div>
           ) : (
-            filteredCategories.map(cat => {
+            <>
+            {filteredCategories.map(cat => {
               const allDone = cat.done === cat.total;
               const isMisc = cat.key === MISC_KEY;
               return (
@@ -900,18 +901,32 @@ export default function Home() {
                   </svg>
                 </div>
               );
-            })
+            })}
+            {/* 새 시험지 스캔 카드 (목록 맨 아래, 점선) */}
+            <div
+              onClick={() => { setImageFile(null); setImagePreview(null); setParseResult(null); setView('scan'); }}
+              className="bg-white rounded-xl border-2 border-dashed border-slate-300 p-4 cursor-pointer transition select-none active:scale-[0.99] flex items-center gap-3 hover:border-[#1B3F8B] hover:bg-[#1B3F8B]/5"
+            >
+              <div className="text-2xl flex-shrink-0">📷</div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-slate-700">새 시험지 스캔하기</p>
+                <p className="text-xs text-slate-400 mt-0.5">사진을 찍으면 AI가 문제를 정리해줘요</p>
+              </div>
+              <span className="text-slate-300 text-xl flex-shrink-0">+</span>
+            </div>
+            </>
           )}
         </div>
 
-        {/* FAB: 스캔 버튼 */}
-        <div className="fixed bottom-24 right-4 z-30">
+        {/* FAB: 시험지 스캔 (Extended) */}
+        <div className="fixed bottom-6 right-4 z-30">
           <button
             onClick={() => { setImageFile(null); setImagePreview(null); setParseResult(null); setView('scan'); }}
-            className="w-14 h-14 bg-[#1B3F8B] text-white rounded-full shadow-lg flex items-center justify-center text-2xl hover:bg-[#163272] transition active:scale-95"
+            className="bg-[#1B3F8B] text-white rounded-full shadow-lg pl-4 pr-5 py-3 flex items-center gap-2 text-sm font-semibold hover:bg-[#163272] transition active:scale-95"
             title="시험지 스캔"
           >
-            +
+            <span className="text-lg">📷</span>
+            <span>시험지 스캔</span>
           </button>
         </div>
 
@@ -1205,7 +1220,31 @@ export default function Home() {
   // ─── 스캔 ───
   if (view === 'scan') {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col max-w-lg mx-auto">
+      <div className="min-h-screen bg-slate-50 flex flex-col max-w-lg mx-auto relative">
+        {/* 풀스크린 분석 중 오버레이 */}
+        {parsing && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-6">
+            <div className="bg-white rounded-2xl px-6 py-8 max-w-sm w-full text-center space-y-4 shadow-2xl">
+              <div className="flex justify-center">
+                <svg className="animate-spin w-12 h-12 text-[#1B3F8B]" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                </svg>
+              </div>
+              <div>
+                <p className="text-base font-bold text-slate-800 mb-1">🤖 AI가 문제를 분석하고 있어요</p>
+                <p className="text-xs text-slate-500">10~20초 정도 걸려요. 잠깐만 기다려주세요.</p>
+              </div>
+              <div className="text-xs text-slate-400 space-y-1.5 text-left bg-slate-50 rounded-lg px-4 py-3">
+                <p>📖 시험지 글자 인식</p>
+                <p>🎯 정답 추론</p>
+                <p>💡 해설 생성</p>
+                <p>🏷️ 과목·단원 분류</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 헤더 */}
         <div className="bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
           <button onClick={() => setView('home')} className="text-slate-400 hover:text-slate-600 transition">
