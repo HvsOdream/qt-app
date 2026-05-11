@@ -7,7 +7,7 @@ import type { User } from '@supabase/supabase-js';
 // ═══════════════════════════════════════════════
 // 타입
 // ═══════════════════════════════════════════════
-type View = 'loading' | 'home' | 'scan' | 'confirm' | 'preview' | 'quiz' | 'result';
+type View = 'loading' | 'home' | 'scan' | 'confirm' | 'categorize' | 'preview' | 'quiz' | 'result';
 type LoginTab = 'login' | 'signup' | 'reset';
 type HomeTab  = 'active' | 'mastered';
 
@@ -174,6 +174,10 @@ export default function Home() {
   const [confirmItems, setConfirmItems] = useState<ConfirmItem[]>([]);
   const [saving, setSaving]             = useState(false);
 
+  // ─── 카테고리 일괄 입력 (categorize view) ───
+  const [categorySubject, setCategorySubject] = useState('');
+  const [categoryTopic, setCategoryTopic]     = useState('');
+
   // ─── 미리보기 (생성된 유사문제) ───
   const [previewItems, setPreviewItems] = useState<WrongNoteItem[]>([]);
 
@@ -312,7 +316,9 @@ export default function Home() {
   // ════════════════════════════════════════
   // 카테고리 확인 → wrong_note 저장
   // ════════════════════════════════════════
-  const handleSaveToWrongNote = async () => {
+  // 공통 카테고리(categorySubject/Topic)를 모든 선택 항목에 일괄 적용해 저장
+  // generateAfter=true이면 저장 직후 유사문제 생성 → preview view로 이동
+  const handleSaveToWrongNote = async (generateAfter: boolean = false) => {
     if (!user) return;
     const toSave = confirmItems.filter(ci => ci.selected && ci.problem.correct_answer);
     if (!toSave.length) { alert('저장할 문제를 선택해주세요.'); return; }
@@ -320,8 +326,8 @@ export default function Home() {
     setSaving(true);
     try {
       const items = toSave.map(ci => ({
-        subject: ci.subject || null,
-        topic: ci.topic || null,
+        subject: categorySubject.trim() || null,
+        topic: categoryTopic.trim() || null,
         question_text: ci.problem.question_text,
         choices: ci.problem.choices || [],
         question_type: ci.problem.question_type || 'multiple_choice',
@@ -335,9 +341,39 @@ export default function Home() {
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      // 홈으로 돌아가서 오답노트 새로고침
-      setView('home');
+
+      const savedItems: WrongNoteItem[] = data.saved || [];
+
+      // 스캔 관련 임시 상태 초기화
       setImageFile(null); setImagePreview(null); setParseResult(null); setConfirmItems([]);
+      setCategorySubject(''); setCategoryTopic('');
+
+      if (generateAfter && savedItems.length > 0) {
+        // 저장된 항목으로 즉시 유사문제 생성 → preview view
+        setGenerating(true);
+        try {
+          const countPer = Math.max(1, Math.ceil(3 / savedItems.length));
+          const responses = await Promise.all(
+            savedItems.map(item =>
+              fetch('/api/generate-similar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ originalItem: item, device_id: user.id, count: countPer }),
+              }).then(r => r.json()).catch(() => ({ items: [] }))
+            )
+          );
+          const allGenerated: WrongNoteItem[] = responses.flatMap(r => r.items || []);
+          if (allGenerated.length > 0) {
+            setPreviewItems(allGenerated);
+            setView('preview');
+          } else {
+            alert('저장은 됐는데 유사문제 생성은 실패했어요.');
+            setView('home');
+          }
+        } finally { setGenerating(false); }
+      } else {
+        setView('home');
+      }
     } catch (e) {
       alert('저장에 실패했습니다.');
       console.error(e);
@@ -904,7 +940,7 @@ export default function Home() {
           <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 flex items-start justify-between gap-3">
             <div className="flex-1">
               <p className="text-xs text-[#1B3F8B] font-semibold mb-0.5">틀린 문제만 골라줘</p>
-              <p className="text-xs text-slate-500">선택한 문제의 단원을 적어주면 정확도가 올라가요</p>
+              <p className="text-xs text-slate-500">단원은 다음 단계에서 한 번에 입력해요</p>
             </div>
             {(() => {
               const allSelected = confirmItems.length > 0 && confirmItems.every(c => c.selected);
@@ -919,70 +955,138 @@ export default function Home() {
             })()}
           </div>
 
-          {confirmItems.map((ci, idx) => {
-            const suggestedSubject = ci.problem.subject || parseResult?.overall_subject || '';
-            const suggestedTopic = ci.problem.topic || '';
-            return (
+          {confirmItems.map((ci, idx) => (
             <div
               key={idx}
-              className={`bg-white rounded-xl border-2 p-4 transition ${
+              onClick={() => setConfirmItems(prev => prev.map((c, i) => i === idx ? { ...c, selected: !c.selected } : c))}
+              className={`bg-white rounded-xl border-2 p-4 transition cursor-pointer ${
                 ci.selected ? 'border-[#1B3F8B]' : 'border-slate-100 opacity-60'
               }`}
             >
-              {/* 선택 토글 */}
               <div className="flex items-start gap-3">
                 <div
-                  className={`mt-0.5 w-5 h-5 rounded-md border-2 flex-shrink-0 flex items-center justify-center cursor-pointer transition ${
+                  className={`mt-0.5 w-5 h-5 rounded-md border-2 flex-shrink-0 flex items-center justify-center transition ${
                     ci.selected ? 'bg-[#1B3F8B] border-[#1B3F8B]' : 'border-slate-300'
                   }`}
-                  onClick={() => setConfirmItems(prev => prev.map((c, i) => i === idx ? { ...c, selected: !c.selected } : c))}
                 >
                   {ci.selected && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-slate-700 mb-3 leading-relaxed">
+                  <p className="text-sm text-slate-700 leading-relaxed">
                     <MathText text={ci.problem.question_text} />
                   </p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-xs text-slate-400 block mb-1">과목</label>
-                      <input
-                        type="text"
-                        value={ci.subject}
-                        onChange={e => setConfirmItems(prev => prev.map((c, i) => i === idx ? { ...c, subject: e.target.value } : c))}
-                        disabled={!ci.selected}
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#1B3F8B] transition disabled:bg-slate-50 disabled:text-slate-400"
-                        placeholder={suggestedSubject ? `예: ${suggestedSubject}` : '예: 수학'}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-slate-400 block mb-1">단원</label>
-                      <input
-                        type="text"
-                        value={ci.topic}
-                        onChange={e => setConfirmItems(prev => prev.map((c, i) => i === idx ? { ...c, topic: e.target.value } : c))}
-                        disabled={!ci.selected}
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#1B3F8B] transition disabled:bg-slate-50 disabled:text-slate-400"
-                        placeholder={suggestedTopic ? `예: ${suggestedTopic}` : '예: 이차함수'}
-                      />
-                    </div>
-                  </div>
                 </div>
               </div>
             </div>
-          );})}
+          ))}
         </div>
 
         <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white border-t border-slate-100 px-4 py-3 z-20">
           <p className="text-xs text-slate-400 text-center mb-2">
-            선택한 {confirmItems.filter(c => c.selected).length}개 문제를 오답노트에 저장합니다
+            {confirmItems.filter(c => c.selected).length}개 선택됨 · 다음 단계에서 단원을 알려주세요
           </p>
           <button
-            onClick={handleSaveToWrongNote}
-            disabled={saving || confirmItems.filter(c => c.selected).length === 0}
+            onClick={() => {
+              // 자동 추정값을 categorize 화면 입력란 기본값으로 미리 채워둠
+              const suggested = parseResult?.overall_subject || '';
+              setCategorySubject(prev => prev || suggested);
+              setCategoryTopic(prev => prev);
+              setView('categorize');
+            }}
+            disabled={confirmItems.filter(c => c.selected).length === 0}
             className="w-full bg-[#1B3F8B] text-white rounded-xl py-4 text-base font-bold hover:bg-[#163272] transition disabled:opacity-60"
           >
-            {saving ? '저장 중...' : '📖 오답노트에 저장'}
+            다음 →
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── 카테고리 일괄 입력 ───
+  if (view === 'categorize') {
+    const selectedCount = confirmItems.filter(c => c.selected).length;
+    const selectedItems = confirmItems.filter(c => c.selected);
+    const suggestedSubject = parseResult?.overall_subject || '';
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col max-w-lg mx-auto">
+        <div className="bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
+          <button onClick={() => setView('confirm')} className="text-slate-400 hover:text-slate-600 transition">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/>
+            </svg>
+          </button>
+          <div className="flex-1">
+            <h1 className="font-bold text-slate-800">단원 입력</h1>
+            <p className="text-xs text-slate-400">{selectedCount}개 문제에 일괄 적용돼요</p>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-32">
+          {/* 선택된 문제 미리보기 */}
+          <div className="space-y-2">
+            <p className="text-xs text-slate-400 font-medium">저장될 문제 ({selectedCount}개)</p>
+            {selectedItems.map((ci, i) => (
+              <div key={i} className="bg-white rounded-lg border border-slate-100 px-3 py-2 text-xs text-slate-600 line-clamp-2">
+                <span className="text-slate-400 mr-1">#{i+1}</span>
+                <MathText text={ci.problem.question_text} />
+              </div>
+            ))}
+          </div>
+
+          {/* 자동 추정 칩 */}
+          {suggestedSubject && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-slate-400">추천:</span>
+              <button
+                onClick={() => setCategorySubject(suggestedSubject)}
+                className="text-xs bg-[#1B3F8B]/10 text-[#1B3F8B] rounded-full px-3 py-1 hover:bg-[#1B3F8B] hover:text-white transition"
+              >
+                과목: {suggestedSubject}
+              </button>
+            </div>
+          )}
+
+          {/* 입력란 */}
+          <div className="space-y-3 bg-white rounded-xl border border-slate-100 p-4">
+            <div>
+              <label className="text-xs text-slate-500 font-medium block mb-1">과목</label>
+              <input
+                type="text"
+                value={categorySubject}
+                onChange={e => setCategorySubject(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1B3F8B] transition"
+                placeholder={suggestedSubject ? `예: ${suggestedSubject}` : '예: 수학, ADsP, 영어'}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 font-medium block mb-1">단원</label>
+              <input
+                type="text"
+                value={categoryTopic}
+                onChange={e => setCategoryTopic(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1B3F8B] transition"
+                placeholder="예: 데이터 이해, 일차부등식"
+              />
+            </div>
+            <p className="text-xs text-slate-400">비워두면 분류 없이 저장돼요. 나중에 수정 가능.</p>
+          </div>
+        </div>
+
+        <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white border-t border-slate-100 px-4 py-3 z-20 space-y-2">
+          <button
+            onClick={() => handleSaveToWrongNote(true)}
+            disabled={saving || generating}
+            className="w-full bg-[#1B3F8B] text-white rounded-xl py-4 text-base font-bold hover:bg-[#163272] transition disabled:opacity-60"
+          >
+            {(saving || generating) ? '처리 중...' : '🧠 저장하고 유사문제 만들기'}
+          </button>
+          <button
+            onClick={() => handleSaveToWrongNote(false)}
+            disabled={saving || generating}
+            className="w-full bg-white border border-slate-200 text-slate-600 rounded-xl py-3 text-sm font-medium hover:bg-slate-50 transition disabled:opacity-60"
+          >
+            💾 저장만 하고 홈으로
           </button>
         </div>
       </div>
