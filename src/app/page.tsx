@@ -7,7 +7,7 @@ import type { User } from '@supabase/supabase-js';
 // ═══════════════════════════════════════════════
 // 타입
 // ═══════════════════════════════════════════════
-type View = 'loading' | 'home' | 'scan' | 'confirm' | 'quiz' | 'result';
+type View = 'loading' | 'home' | 'scan' | 'confirm' | 'preview' | 'quiz' | 'result';
 type LoginTab = 'login' | 'signup' | 'reset';
 type HomeTab  = 'active' | 'mastered';
 
@@ -174,6 +174,9 @@ export default function Home() {
   const [confirmItems, setConfirmItems] = useState<ConfirmItem[]>([]);
   const [saving, setSaving]             = useState(false);
 
+  // ─── 미리보기 (생성된 유사문제) ───
+  const [previewItems, setPreviewItems] = useState<WrongNoteItem[]>([]);
+
   // ─── 퀴즈 ───
   const [quizItems, setQuizItems]       = useState<WrongNoteItem[]>([]);
   const [quizSource, setQuizSource]     = useState<'wrong_note' | 'generated'>('wrong_note');
@@ -290,11 +293,13 @@ export default function Home() {
       if (data.error) throw new Error(data.error);
       setParseResult(data);
       // 카테고리 확인 화면 준비
+      // - 기본값: 모든 항목 unchecked → 사용자가 틀린 것만 직접 선택
+      // - subject/topic은 자동 추정값을 placeholder로만 노출, 입력값은 빈 문자열
       const items: ConfirmItem[] = data.problems.map((p: ParsedProblem) => ({
         problem: p,
-        subject: p.subject || data.overall_subject || '',
-        topic: p.topic || '',
-        selected: true,
+        subject: '',
+        topic: '',
+        selected: false,
       }));
       setConfirmItems(items);
       setView('confirm');
@@ -370,25 +375,26 @@ export default function Home() {
     startQuiz(selected, 'wrong_note');
   };
 
-  // ─── 유사문제 생성 ───
+  // ─── 유사문제 생성 (병렬) → 미리보기로 이동 ───
   const handleGenerateSimilar = async () => {
     if (!user || selectedIds.size === 0) return;
     const selected = wrongNote.filter(item => selectedIds.has(item.id));
     setGenerating(true);
     try {
-      const allGenerated: WrongNoteItem[] = [];
-      for (const item of selected) {
-        const countPer = Math.max(1, Math.ceil(3 / selected.length));
-        const res = await fetch('/api/generate-similar', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ originalItem: item, device_id: user.id, count: countPer }),
-        });
-        const data = await res.json();
-        if (data.items) allGenerated.push(...data.items);
-      }
+      const countPer = Math.max(1, Math.ceil(3 / selected.length));
+      const responses = await Promise.all(
+        selected.map(item =>
+          fetch('/api/generate-similar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ originalItem: item, device_id: user.id, count: countPer }),
+          }).then(r => r.json()).catch(() => ({ items: [] }))
+        )
+      );
+      const allGenerated: WrongNoteItem[] = responses.flatMap(r => r.items || []);
       if (allGenerated.length > 0) {
-        startQuiz(allGenerated, 'generated');
+        setPreviewItems(allGenerated);
+        setView('preview');
       } else {
         alert('유사문제 생성에 실패했습니다.');
       }
@@ -894,7 +900,29 @@ export default function Home() {
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 pb-28">
-          {confirmItems.map((ci, idx) => (
+          {/* 안내 + 전체 선택/해제 토글 */}
+          <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 flex items-start justify-between gap-3">
+            <div className="flex-1">
+              <p className="text-xs text-[#1B3F8B] font-semibold mb-0.5">틀린 문제만 골라줘</p>
+              <p className="text-xs text-slate-500">선택한 문제의 단원을 적어주면 정확도가 올라가요</p>
+            </div>
+            {(() => {
+              const allSelected = confirmItems.length > 0 && confirmItems.every(c => c.selected);
+              return (
+                <button
+                  onClick={() => setConfirmItems(prev => prev.map(c => ({ ...c, selected: !allSelected })))}
+                  className="text-xs font-medium text-[#1B3F8B] bg-white border border-[#1B3F8B]/30 rounded-lg px-3 py-1.5 hover:bg-[#1B3F8B] hover:text-white transition flex-shrink-0"
+                >
+                  {allSelected ? '전체 해제' : '전체 선택'}
+                </button>
+              );
+            })()}
+          </div>
+
+          {confirmItems.map((ci, idx) => {
+            const suggestedSubject = ci.problem.subject || parseResult?.overall_subject || '';
+            const suggestedTopic = ci.problem.topic || '';
+            return (
             <div
               key={idx}
               className={`bg-white rounded-xl border-2 p-4 transition ${
@@ -922,8 +950,9 @@ export default function Home() {
                         type="text"
                         value={ci.subject}
                         onChange={e => setConfirmItems(prev => prev.map((c, i) => i === idx ? { ...c, subject: e.target.value } : c))}
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#1B3F8B] transition"
-                        placeholder="예: 수학"
+                        disabled={!ci.selected}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#1B3F8B] transition disabled:bg-slate-50 disabled:text-slate-400"
+                        placeholder={suggestedSubject ? `예: ${suggestedSubject}` : '예: 수학'}
                       />
                     </div>
                     <div>
@@ -932,15 +961,16 @@ export default function Home() {
                         type="text"
                         value={ci.topic}
                         onChange={e => setConfirmItems(prev => prev.map((c, i) => i === idx ? { ...c, topic: e.target.value } : c))}
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#1B3F8B] transition"
-                        placeholder="예: 이차함수"
+                        disabled={!ci.selected}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#1B3F8B] transition disabled:bg-slate-50 disabled:text-slate-400"
+                        placeholder={suggestedTopic ? `예: ${suggestedTopic}` : '예: 이차함수'}
                       />
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-          ))}
+          );})}
         </div>
 
         <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white border-t border-slate-100 px-4 py-3 z-20">
@@ -953,6 +983,59 @@ export default function Home() {
             className="w-full bg-[#1B3F8B] text-white rounded-xl py-4 text-base font-bold hover:bg-[#163272] transition disabled:opacity-60"
           >
             {saving ? '저장 중...' : '📖 오답노트에 저장'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── 미리보기 (생성된 유사문제) ───
+  if (view === 'preview') {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col max-w-lg mx-auto">
+        <div className="bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
+          <button onClick={() => setView('home')} className="text-slate-400 hover:text-slate-600 transition">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/>
+            </svg>
+          </button>
+          <div className="flex-1">
+            <h1 className="font-bold text-slate-800">유사문제 {previewItems.length}개 생성</h1>
+            <p className="text-xs text-slate-400">문제은행에 저장됨 · 준비되면 풀어보세요</p>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 pb-28">
+          {previewItems.map((it, idx) => (
+            <div key={it.id || idx} className="bg-white rounded-xl border border-slate-100 p-4">
+              <div className="flex items-center gap-2 mb-2 text-xs">
+                <span className="text-slate-400">#{idx + 1}</span>
+                {it.subject && <span className="bg-[#1B3F8B]/10 text-[#1B3F8B] rounded-full px-2 py-0.5 font-medium">{it.subject}</span>}
+                {it.topic && <span className="bg-slate-100 text-slate-600 rounded-full px-2 py-0.5">{it.topic}</span>}
+                <span className="text-slate-400 ml-auto">
+                  {it.question_type === 'multiple_choice' ? '객관식' : it.question_type === 'short_answer' ? '단답형' : '서술형'}
+                </span>
+              </div>
+              <p className="text-sm text-slate-700 leading-relaxed">
+                <MathText text={it.question_text} />
+              </p>
+              <p className="text-xs text-slate-400 mt-2">선택지·정답은 풀이 화면에서 공개돼요</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white border-t border-slate-100 px-4 py-3 z-20 space-y-2">
+          <button
+            onClick={() => startQuiz(previewItems, 'generated')}
+            className="w-full bg-[#1B3F8B] text-white rounded-xl py-4 text-base font-bold hover:bg-[#163272] transition"
+          >
+            ▶️ 풀어보기
+          </button>
+          <button
+            onClick={() => { setSelectedIds(new Set()); setView('home'); }}
+            className="w-full bg-white border border-slate-200 text-slate-600 rounded-xl py-3 text-sm font-medium hover:bg-slate-50 transition"
+          >
+            나중에 풀게 (오답노트로 돌아가기)
           </button>
         </div>
       </div>
@@ -1055,113 +1138,4 @@ export default function Home() {
             </div>
           )}
 
-          {/* 결과 + 해설 */}
-          {showExplanation && (
-            <div className={`rounded-2xl p-4 ${
-              selectedAnswer === normalizeAnswer(item.correct_answer) || (item.question_type === 'short_answer' && isShortAnswerCorrect(selectedAnswer || '', item.correct_answer))
-                ? 'bg-emerald-50 border border-emerald-200'
-                : 'bg-red-50 border border-red-200'
-            }`}>
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-lg">
-                  {(selectedAnswer === normalizeAnswer(item.correct_answer)) ||
-                   (item.question_type === 'short_answer' && isShortAnswerCorrect(selectedAnswer || '', item.correct_answer))
-                    ? '✅' : '❌'}
-                </span>
-                <span className="text-sm font-bold text-slate-700">
-                  정답: <MathText text={item.correct_answer} />
-                </span>
-              </div>
-              {item.explanation && (
-                <p className="text-sm text-slate-600 leading-relaxed">
-                  <MathText text={item.explanation} />
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* 다음 버튼 */}
-        {showExplanation && (
-          <div className="sticky bottom-0 bg-white border-t border-slate-100 px-4 py-3">
-            <button
-              onClick={nextProblem}
-              className="w-full bg-[#1B3F8B] text-white rounded-xl py-4 text-base font-bold hover:bg-[#163272] transition"
-            >
-              {currentIndex + 1 >= quizItems.length ? '결과 보기' : '다음 문제 →'}
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // ─── 결과 ───
-  if (view === 'result') {
-    const percentage = quizItems.length > 0 ? Math.round((score.correct / quizItems.length) * 100) : 0;
-    return (
-      <div className="min-h-screen bg-slate-50 flex flex-col max-w-lg mx-auto">
-        <div className="bg-white border-b border-slate-100 px-4 py-3">
-          <h1 className="font-bold text-slate-800 text-center">퀴즈 결과</h1>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4 pb-28">
-          {/* 점수 카드 */}
-          <div className="bg-[#1B3F8B] rounded-2xl p-6 text-center text-white">
-            <div className="text-5xl font-black mb-1">{percentage}점</div>
-            <div className="text-blue-200 text-sm">{score.correct} / {quizItems.length} 정답</div>
-          </div>
-
-          {/* 마스터 알림 */}
-          {newlyMastered.length > 0 && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-3">
-              <span className="text-2xl">🏆</span>
-              <div>
-                <p className="text-sm font-bold text-amber-700">완료 달성!</p>
-                <p className="text-xs text-amber-600">{newlyMastered.length}개 문제를 마스터했어요.</p>
-              </div>
-            </div>
-          )}
-
-          {/* 문제별 결과 */}
-          <div className="space-y-2">
-            {quizAnswers.map((qa, idx) => {
-              const item = quizItems[idx];
-              return (
-                <div key={idx} className={`bg-white rounded-xl border p-3 ${qa.isCorrect ? 'border-emerald-100' : 'border-red-100'}`}>
-                  <div className="flex items-start gap-3">
-                    <span className="text-lg flex-shrink-0">{qa.isCorrect ? '✅' : '❌'}</span>
-                    <div className="min-w-0">
-                      <p className="text-xs text-slate-400 mb-1">
-                        {item.subject}{item.topic ? ` · ${item.topic}` : ''}
-                      </p>
-                      <p className="text-sm text-slate-700 line-clamp-2">
-                        <MathText text={item.question_text} />
-                      </p>
-                      {!qa.isCorrect && (
-                        <p className="text-xs text-red-500 mt-1">
-                          내 답: {qa.studentAnswer} → 정답: <MathText text={item.correct_answer} />
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white border-t border-slate-100 px-4 py-3 z-20">
-          <button
-            onClick={() => { setSelectedIds(new Set()); setView('home'); }}
-            className="w-full bg-[#1B3F8B] text-white rounded-xl py-4 text-base font-bold hover:bg-[#163272] transition"
-          >
-            오답노트로 돌아가기
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return null;
-}
+          {/*

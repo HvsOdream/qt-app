@@ -1,15 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 
-export const maxDuration = 60;
-
 const PARSE_PROMPT = `너는 시험 문제 분석 전문가야. 학생이 문제 사진을 업로드하면, 문제를 정확히 파싱해서 구조화된 JSON으로 반환해.
 
 ## 파싱 규칙
 1. 이미지에서 문제 텍스트, 선택지를 추출
-2. 과목/단원은 문맥으로 추론 (수학, 과학, 사회, 영어, 국어 등)
+2. 과목/단원은 **이미지에 명시된 경우에만** 채운다. 명시되어 있지 않으면 빈 문자열("")로 둔다 — 사용자가 직접 입력함
 3. 핵심 개념 키워드를 추출
 4. 여러 문제가 보이면 모두 파싱
+
+## ★ subject/topic 추출 규칙 (오작동 방지)
+- **subject**: 시험지 머리말이나 단원 표지에 명시된 과목명만 사용 (예: "수학", "정보처리기능사", "ADsP", "TOEIC")
+- **topic**: 챕터 번호·단원 제목·소제목 등 명시적으로 보이는 텍스트만 사용
+- ⚠️ **선택지(①, ②, ③, ④, ⑤)의 텍스트를 절대 topic에 넣지 마라**
+- ⚠️ 보기 1번이 "데이터 시각화"라고 해서 topic이 "데이터 시각화"가 되면 안 된다 — 보기는 답일 뿐 단원이 아니다
+- 과목/단원이 사진에 명시되지 않았거나 확신이 낮으면 빈 문자열("")로 두고, overall_subject만 시험지 종류로 추정 (예: "ADsP", "수능 모의고사", "내신 시험지")
 
 ## ★ 정답 추론 (가장 중요)
 - 시험지에 정답이 표시되어 있으면 그것을 사용
@@ -101,36 +106,4 @@ export async function POST(request: NextRequest) {
               },
             },
             {
-              type: 'text',
-              text: PARSE_PROMPT,
-            },
-          ],
-        },
-      ],
-    });
-
-    const textContent = message.content[0];
-    if (textContent.type !== 'text') {
-      return NextResponse.json(
-        { error: 'API 응답 형식 오류' },
-        { status: 500 }
-      );
-    }
-
-    // JSON 파싱 (Claude가 가끔 ```json 감싸기도 하므로 정리)
-    let jsonText = textContent.text.trim();
-    if (jsonText.startsWith('```')) {
-      jsonText = jsonText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-    }
-
-    const parsed = JSON.parse(jsonText);
-
-    return NextResponse.json(parsed);
-  } catch (error) {
-    console.error('이미지 파싱 오류:', error);
-    return NextResponse.json(
-      { error: '이미지 분석 중 오류가 발생했습니다.' },
-      { status: 500 }
-    );
-  }
-}
+              type:
