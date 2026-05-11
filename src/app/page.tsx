@@ -494,17 +494,63 @@ export default function Home() {
   };
 
   // ════════════════════════════════════════
-  // 필터된 오답노트
+  // 자식 항목 풀이 시작 (원본 카드 클릭)
   // ════════════════════════════════════════
-  const filteredNote = wrongNote.filter(item => {
-    if (homeTab === 'active' && item.mastered) return false;
-    if (homeTab === 'mastered' && !item.mastered) return false;
+  const childrenOf = useCallback((parentId: string) =>
+    wrongNote.filter(c => c.parent_id === parentId), [wrongNote]);
+
+  const handleStartChildren = async (parent: WrongNoteItem) => {
+    const children = childrenOf(parent.id);
+    if (children.length > 0) {
+      // mastered 안 된 자식 우선, 없으면 전체
+      const remaining = children.filter(c => !c.mastered);
+      startQuiz(remaining.length > 0 ? remaining : children, 'generated');
+      return;
+    }
+    // 자식 없으면 즉시 유사문제 생성 → preview
+    if (!user) return;
+    setGenerating(true);
+    try {
+      const res = await fetch('/api/generate-similar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ originalItem: parent, device_id: user.id, count: 3 }),
+      });
+      const data = await res.json();
+      const items: WrongNoteItem[] = data.items || [];
+      if (items.length > 0) {
+        setPreviewItems(items);
+        setView('preview');
+      } else {
+        alert('유사문제 생성에 실패했습니다.');
+      }
+    } catch {
+      alert('유사문제 생성 오류');
+    } finally { setGenerating(false); }
+  };
+
+  // ════════════════════════════════════════
+  // 필터된 오답노트 (원본만 — source==='scan')
+  // ════════════════════════════════════════
+  const originals = wrongNote.filter(i => i.source === 'scan');
+
+  // 부모 mastered 판정: 본인 mastered OR 자식 1개 이상이고 모두 mastered
+  const isParentDone = (parent: WrongNoteItem): boolean => {
+    if (parent.mastered) return true;
+    const kids = wrongNote.filter(c => c.parent_id === parent.id);
+    return kids.length > 0 && kids.every(c => c.mastered);
+  };
+
+  const filteredNote = originals.filter(item => {
+    const done = isParentDone(item);
+    if (homeTab === 'active' && done) return false;
+    if (homeTab === 'mastered' && !done) return false;
     if (filterSubject && item.subject !== filterSubject) return false;
     return true;
   });
 
-  const activeCount   = wrongNote.filter(i => !i.mastered).length;
-  const masteredCount = wrongNote.filter(i => i.mastered).length;
+  const activeCount   = originals.filter(i => !isParentDone(i)).length;
+  const masteredCount = originals.filter(i =>  isParentDone(i)).length;
 
   // ════════════════════════════════════════
   // 렌더
@@ -731,69 +777,63 @@ export default function Home() {
             </div>
           ) : (
             filteredNote.map(item => {
-              const isSelected = selectedIds.has(item.id);
+              const kids = childrenOf(item.id);
+              const kidMastered = kids.filter(c => c.mastered).length;
+              const done = isParentDone(item);
+              const hasKids = kids.length > 0;
               return (
                 <div
                   key={item.id}
-                  onClick={() => toggleSelect(item.id)}
-                  className={`bg-white rounded-xl border-2 p-4 cursor-pointer transition select-none ${
-                    isSelected ? 'border-[#1B3F8B] shadow-sm' : 'border-slate-100 hover:border-slate-200'
+                  onClick={() => handleStartChildren(item)}
+                  className={`bg-white rounded-xl border-2 p-4 cursor-pointer transition select-none active:scale-[0.99] ${
+                    done ? 'border-emerald-200' : 'border-slate-100 hover:border-[#1B3F8B]/40'
                   }`}
                 >
                   <div className="flex items-start gap-3">
-                    {/* 체크박스 */}
-                    <div className={`mt-0.5 w-5 h-5 rounded-md border-2 flex-shrink-0 flex items-center justify-center transition ${
-                      isSelected ? 'bg-[#1B3F8B] border-[#1B3F8B]' : 'border-slate-300'
-                    }`}>
-                      {isSelected && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>}
-                    </div>
-
                     <div className="flex-1 min-w-0">
-                      {/* 태그 */}
-                      <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-                        {item.subject && (
-                          <span className="text-xs bg-[#1B3F8B]/10 text-[#1B3F8B] rounded px-1.5 py-0.5 font-medium">
+                      {/* 카테고리 칩 */}
+                      <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+                        {item.subject ? (
+                          <span className="text-xs bg-[#1B3F8B]/10 text-[#1B3F8B] rounded px-2 py-0.5 font-semibold">
                             {item.subject}
                           </span>
+                        ) : (
+                          <span className="text-xs bg-slate-100 text-slate-400 rounded px-2 py-0.5">미분류</span>
                         )}
                         {item.topic && (
-                          <span className="text-xs bg-slate-100 text-slate-500 rounded px-1.5 py-0.5">
+                          <span className="text-xs bg-slate-100 text-slate-600 rounded px-2 py-0.5">
                             {item.topic}
                           </span>
-                        )}
-                        {item.source === 'generated' && (
-                          <span className="text-xs bg-amber-50 text-amber-600 rounded px-1.5 py-0.5">AI생성</span>
                         )}
                       </div>
 
                       {/* 문제 미리보기 */}
-                      <p className="text-sm text-slate-700 line-clamp-2 leading-relaxed">
+                      <p className="text-sm text-slate-700 line-clamp-2 leading-relaxed mb-2">
                         <MathText text={item.question_text} />
                       </p>
 
-                      {/* 틀린 횟수 인디케이터 */}
-                      <div className="flex items-center gap-3 mt-2">
-                        <div className="flex items-center gap-1">
-                          {Array.from({ length: 3 }).map((_, i) => (
-                            <div
-                              key={i}
-                              className={`w-2 h-2 rounded-full ${
-                                i < item.times_correct ? 'bg-emerald-400' : 'bg-slate-200'
-                              }`}
-                            />
-                          ))}
-                          <span className="text-xs text-slate-400 ml-1">
-                            {item.times_correct}/3 맞춤
-                          </span>
-                        </div>
-                        {item.times_wrong > 0 && (
-                          <span className="text-xs text-red-400">{item.times_wrong}번 틀림</span>
+                      {/* 자식 통계 또는 빈 상태 */}
+                      <div className="flex items-center justify-between gap-2">
+                        {hasKids ? (
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="text-slate-500">유사문제 {kids.length}개</span>
+                            <span className="text-slate-300">·</span>
+                            <span className="text-emerald-600 font-medium">{kidMastered}/{kids.length} 풀음</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5 text-xs text-amber-600">
+                            <span>🧠</span>
+                            <span className="font-medium">탭하면 유사문제 만들기</span>
+                          </div>
+                        )}
+                        {hasKids && !done && (
+                          <span className="text-xs bg-[#1B3F8B] text-white rounded-full px-2.5 py-1 font-medium">▶️ 풀기</span>
                         )}
                       </div>
                     </div>
 
                     {/* 마스터 뱃지 */}
-                    {item.mastered && (
+                    {done && (
                       <span className="flex-shrink-0 text-lg">🏆</span>
                     )}
                   </div>
@@ -814,30 +854,10 @@ export default function Home() {
           </button>
         </div>
 
-        {/* 하단 액션 바 (선택 시) */}
-        {selectedIds.size > 0 && (
-          <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white border-t border-slate-200 px-4 py-3 z-20 shadow-lg">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-slate-700">{selectedIds.size}개 선택</span>
-              <button onClick={() => setSelectedIds(new Set())} className="text-xs text-slate-400 hover:text-slate-600">
-                선택 해제
-              </button>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={handleStartQuizFromSelected}
-                className="flex-1 bg-[#1B3F8B] text-white rounded-xl py-3 text-sm font-bold hover:bg-[#163272] transition"
-              >
-                다시 풀기
-              </button>
-              <button
-                onClick={handleGenerateSimilar}
-                disabled={generating}
-                className="flex-1 bg-amber-500 text-white rounded-xl py-3 text-sm font-bold hover:bg-amber-600 transition disabled:opacity-60"
-              >
-                {generating ? '생성 중...' : '✨ 유사문제'}
-              </button>
-            </div>
+        {/* 생성 중 오버레이 */}
+        {generating && (
+          <div className="fixed inset-0 bg-slate-900/30 flex items-center justify-center z-40">
+            <div className="bg-white rounded-xl px-6 py-4 shadow-lg text-sm text-slate-700">🧠 유사문제 만드는 중...</div>
           </div>
         )}
       </div>
