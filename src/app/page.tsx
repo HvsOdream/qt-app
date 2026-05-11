@@ -7,7 +7,7 @@ import type { User } from '@supabase/supabase-js';
 // ═══════════════════════════════════════════════
 // 타입
 // ═══════════════════════════════════════════════
-type View = 'loading' | 'home' | 'scan' | 'confirm' | 'categorize' | 'preview' | 'quiz' | 'result';
+type View = 'loading' | 'home' | 'category' | 'scan' | 'confirm' | 'categorize' | 'preview' | 'quiz' | 'result';
 type LoginTab = 'login' | 'signup' | 'reset';
 type HomeTab  = 'active' | 'mastered';
 
@@ -159,6 +159,7 @@ export default function Home() {
   const [filterSubject, setFilterSubject] = useState('');
   const [subjects, setSubjects]         = useState<Record<string, number>>({});
   const [selectedIds, setSelectedIds]   = useState<Set<string>>(new Set());
+  const [selectedCategoryKey, setSelectedCategoryKey] = useState<string>('');
   const [noteLoading, setNoteLoading]   = useState(false);
   const [generating, setGenerating]     = useState(false);
 
@@ -534,23 +535,98 @@ export default function Home() {
   // ════════════════════════════════════════
   const originals = wrongNote.filter(i => i.source === 'scan');
 
-  // 부모 mastered 판정: 본인 mastered OR 자식 1개 이상이고 모두 mastered
+  // 부모 mastered 판정
   const isParentDone = (parent: WrongNoteItem): boolean => {
     if (parent.mastered) return true;
     const kids = wrongNote.filter(c => c.parent_id === parent.id);
     return kids.length > 0 && kids.every(c => c.mastered);
   };
 
-  const filteredNote = originals.filter(item => {
-    const done = isParentDone(item);
-    if (homeTab === 'active' && done) return false;
-    if (homeTab === 'mastered' && !done) return false;
-    if (filterSubject && item.subject !== filterSubject) return false;
+  // ─── 카테고리 그룹핑 (과목+단원 조합 = 1 폴더) ───
+  const MISC_KEY = '__misc__';
+  const categoryKeyOf = (item: WrongNoteItem): string => {
+    const s = (item.subject || '').trim();
+    const t = (item.topic || '').trim();
+    if (!s && !t) return MISC_KEY;
+    return `${s}§${t}`;
+  };
+  const labelOf = (key: string): { subject: string; topic: string; label: string } => {
+    if (key === MISC_KEY) return { subject: '', topic: '', label: '미분류' };
+    const [s, t] = key.split('§');
+    return { subject: s, topic: t, label: s + (t ? ` · ${t}` : '') };
+  };
+
+  const categories = (() => {
+    const map = new Map<string, WrongNoteItem[]>();
+    originals.forEach(it => {
+      const k = categoryKeyOf(it);
+      if (!map.has(k)) map.set(k, []);
+      map.get(k)!.push(it);
+    });
+    return Array.from(map.entries()).map(([key, items]) => {
+      const total = items.length;
+      const done = items.filter(isParentDone).length;
+      return { key, items, total, done, ...labelOf(key) };
+    }).sort((a, b) => {
+      // 미분류는 맨 아래로
+      if (a.key === MISC_KEY) return 1;
+      if (b.key === MISC_KEY) return -1;
+      return a.label.localeCompare(b.label, 'ko');
+    });
+  })();
+
+  // 학습중/완료 탭 카운트는 폴더 단위
+  const activeCount   = categories.filter(c => c.done < c.total).length;
+  const masteredCount = categories.filter(c => c.done === c.total).length;
+
+  const filteredCategories = categories.filter(c => {
+    const allDone = c.done === c.total;
+    if (homeTab === 'active' && allDone) return false;
+    if (homeTab === 'mastered' && !allDone) return false;
     return true;
   });
 
-  const activeCount   = originals.filter(i => !isParentDone(i)).length;
-  const masteredCount = originals.filter(i =>  isParentDone(i)).length;
+  // 선택된 카테고리의 원본 문제 목록 (category view용)
+  const itemsOfSelectedCategory = originals.filter(i => categoryKeyOf(i) === selectedCategoryKey);
+
+  // ─── 분류 변경 핸들러 ───
+  const handleChangeCategory = async (item: WrongNoteItem) => {
+    const newSubject = window.prompt('과목을 입력해줘 (예: ADsP, 수학)', item.subject || '');
+    if (newSubject === null) return;
+    const newTopic = window.prompt('단원을 입력해줘 (예: 데이터 이해)', item.topic || '');
+    if (newTopic === null) return;
+    try {
+      const res = await fetch(`/api/wrong-note/${item.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subject: newSubject, topic: newTopic }),
+      });
+      if (!res.ok) throw new Error('분류 변경 실패');
+      // 카테고리가 바뀌면 selectedCategoryKey도 새 키로 갱신
+      const newKey = (!newSubject.trim() && !newTopic.trim())
+        ? MISC_KEY
+        : `${newSubject.trim()}§${newTopic.trim()}`;
+      if (view === 'category') setSelectedCategoryKey(newKey);
+      await loadWrongNote();
+    } catch { alert('분류 변경 중 오류가 발생했습니다.'); }
+  };
+
+  // ─── 항목 삭제 핸들러 (자식 cascade) ───
+  const handleDelete = async (item: WrongNoteItem) => {
+    if (!window.confirm('이 원본 문제와 유사문제까지 모두 삭제할까요?\n되돌릴 수 없습니다.')) return;
+    try {
+      const res = await fetch(`/api/wrong-note/${item.id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('삭제 실패');
+      await loadWrongNote();
+      // 폴더가 비면 홈으로 복귀
+      if (view === 'category') {
+        const remain = wrongNote.filter(i =>
+          i.source === 'scan' && i.id !== item.id && categoryKeyOf(i) === selectedCategoryKey
+        );
+        if (remain.length === 0) setView('home');
+      }
+    } catch { alert('삭제 중 오류가 발생했습니다.'); }
+  };
 
   // ════════════════════════════════════════
   // 렌더
@@ -729,41 +805,16 @@ export default function Home() {
           ))}
         </div>
 
-        {/* 과목 필터 칩 */}
-        {Object.keys(subjects).length > 0 && (
-          <div className="bg-white px-4 py-2 flex gap-2 overflow-x-auto scrollbar-hide">
-            <button
-              onClick={() => setFilterSubject('')}
-              className={`flex-shrink-0 text-xs rounded-full px-3 py-1.5 border transition ${
-                !filterSubject ? 'bg-[#1B3F8B] text-white border-[#1B3F8B]' : 'border-slate-200 text-slate-500 hover:border-slate-300'
-              }`}
-            >
-              전체
-            </button>
-            {Object.keys(subjects).map(s => (
-              <button
-                key={s}
-                onClick={() => setFilterSubject(s === filterSubject ? '' : s)}
-                className={`flex-shrink-0 text-xs rounded-full px-3 py-1.5 border transition ${
-                  filterSubject === s ? 'bg-[#1B3F8B] text-white border-[#1B3F8B]' : 'border-slate-200 text-slate-500 hover:border-slate-300'
-                }`}
-              >
-                {s} <span className="opacity-70">{subjects[s]}</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* 오답노트 목록 */}
+        {/* 카테고리 폴더 목록 */}
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 pb-36">
           {noteLoading ? (
             <div className="text-center py-16 text-slate-400 text-sm">불러오는 중...</div>
-          ) : filteredNote.length === 0 ? (
+          ) : filteredCategories.length === 0 ? (
             <div className="text-center py-16 space-y-3">
               <div className="text-4xl">{homeTab === 'mastered' ? '🏆' : '📖'}</div>
               <p className="text-slate-500 text-sm">
                 {homeTab === 'mastered'
-                  ? '아직 완료한 문제가 없어요.'
+                  ? '아직 완료한 카테고리가 없어요.'
                   : '시험지를 스캔해서 오답노트를 시작해봐요!'}
               </p>
               {homeTab === 'active' && (
@@ -776,67 +827,29 @@ export default function Home() {
               )}
             </div>
           ) : (
-            filteredNote.map(item => {
-              const kids = childrenOf(item.id);
-              const kidMastered = kids.filter(c => c.mastered).length;
-              const done = isParentDone(item);
-              const hasKids = kids.length > 0;
+            filteredCategories.map(cat => {
+              const allDone = cat.done === cat.total;
+              const isMisc = cat.key === MISC_KEY;
               return (
                 <div
-                  key={item.id}
-                  onClick={() => handleStartChildren(item)}
-                  className={`bg-white rounded-xl border-2 p-4 cursor-pointer transition select-none active:scale-[0.99] ${
-                    done ? 'border-emerald-200' : 'border-slate-100 hover:border-[#1B3F8B]/40'
+                  key={cat.key}
+                  onClick={() => { setSelectedCategoryKey(cat.key); setView('category'); }}
+                  className={`bg-white rounded-xl border-2 p-4 cursor-pointer transition select-none active:scale-[0.99] flex items-center gap-3 ${
+                    allDone ? 'border-emerald-200' : isMisc ? 'border-amber-200' : 'border-slate-100 hover:border-[#1B3F8B]/40'
                   }`}
                 >
-                  <div className="flex items-start gap-3">
-                    <div className="flex-1 min-w-0">
-                      {/* 카테고리 칩 */}
-                      <div className="flex items-center gap-1.5 mb-2 flex-wrap">
-                        {item.subject ? (
-                          <span className="text-xs bg-[#1B3F8B]/10 text-[#1B3F8B] rounded px-2 py-0.5 font-semibold">
-                            {item.subject}
-                          </span>
-                        ) : (
-                          <span className="text-xs bg-slate-100 text-slate-400 rounded px-2 py-0.5">미분류</span>
-                        )}
-                        {item.topic && (
-                          <span className="text-xs bg-slate-100 text-slate-600 rounded px-2 py-0.5">
-                            {item.topic}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* 문제 미리보기 */}
-                      <p className="text-sm text-slate-700 line-clamp-2 leading-relaxed mb-2">
-                        <MathText text={item.question_text} />
-                      </p>
-
-                      {/* 자식 통계 또는 빈 상태 */}
-                      <div className="flex items-center justify-between gap-2">
-                        {hasKids ? (
-                          <div className="flex items-center gap-2 text-xs">
-                            <span className="text-slate-500">유사문제 {kids.length}개</span>
-                            <span className="text-slate-300">·</span>
-                            <span className="text-emerald-600 font-medium">{kidMastered}/{kids.length} 풀음</span>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1.5 text-xs text-amber-600">
-                            <span>🧠</span>
-                            <span className="font-medium">탭하면 유사문제 만들기</span>
-                          </div>
-                        )}
-                        {hasKids && !done && (
-                          <span className="text-xs bg-[#1B3F8B] text-white rounded-full px-2.5 py-1 font-medium">▶️ 풀기</span>
-                        )}
-                      </div>
+                  <div className="text-2xl flex-shrink-0">{isMisc ? '⚠️' : allDone ? '🏆' : '📁'}</div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-slate-800 truncate">{cat.label}</p>
+                    <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
+                      <span>{cat.total}문제</span>
+                      {cat.done > 0 && <><span className="text-slate-300">·</span><span className="text-emerald-600 font-medium">{cat.done}완료</span></>}
+                      {isMisc && <><span className="text-slate-300">·</span><span className="text-amber-600 font-medium">분류 필요</span></>}
                     </div>
-
-                    {/* 마스터 뱃지 */}
-                    {done && (
-                      <span className="flex-shrink-0 text-lg">🏆</span>
-                    )}
                   </div>
+                  <svg className="w-4 h-4 text-slate-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
+                  </svg>
                 </div>
               );
             })
@@ -852,6 +865,97 @@ export default function Home() {
           >
             +
           </button>
+        </div>
+
+        {/* 생성 중 오버레이 */}
+        {generating && (
+          <div className="fixed inset-0 bg-slate-900/30 flex items-center justify-center z-40">
+            <div className="bg-white rounded-xl px-6 py-4 shadow-lg text-sm text-slate-700">🧠 유사문제 만드는 중...</div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ─── 카테고리 안 문제 목록 ───
+  if (view === 'category') {
+    const meta = labelOf(selectedCategoryKey);
+    const items = itemsOfSelectedCategory;
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col max-w-lg mx-auto">
+        {/* 헤더 */}
+        <div className="bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
+          <button onClick={() => setView('home')} className="text-slate-400 hover:text-slate-600 transition">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/>
+            </svg>
+          </button>
+          <div className="flex-1 min-w-0">
+            <h1 className="font-bold text-slate-800 truncate">{meta.label}</h1>
+            <p className="text-xs text-slate-400">{items.length}문제</p>
+          </div>
+        </div>
+
+        {/* 문제 카드 목록 */}
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 pb-24">
+          {items.length === 0 ? (
+            <div className="text-center py-16 text-sm text-slate-400">이 카테고리에 문제가 없어요.</div>
+          ) : items.map(item => {
+            const kids = childrenOf(item.id);
+            const kidMastered = kids.filter(c => c.mastered).length;
+            const done = isParentDone(item);
+            const hasKids = kids.length > 0;
+            return (
+              <div
+                key={item.id}
+                className={`bg-white rounded-xl border-2 p-4 transition select-none ${
+                  done ? 'border-emerald-200' : 'border-slate-100'
+                }`}
+              >
+                <div
+                  onClick={() => handleStartChildren(item)}
+                  className="cursor-pointer active:scale-[0.99]"
+                >
+                  <p className="text-sm text-slate-700 line-clamp-2 leading-relaxed mb-2">
+                    <MathText text={item.question_text} />
+                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    {hasKids ? (
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="text-slate-500">유사문제 {kids.length}개</span>
+                        <span className="text-slate-300">·</span>
+                        <span className="text-emerald-600 font-medium">{kidMastered}/{kids.length} 풀음</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 text-xs text-amber-600">
+                        <span>🧠</span>
+                        <span className="font-medium">탭하면 유사문제 만들기</span>
+                      </div>
+                    )}
+                    {hasKids && !done && (
+                      <span className="text-xs bg-[#1B3F8B] text-white rounded-full px-2.5 py-1 font-medium">▶️ 풀기</span>
+                    )}
+                    {done && <span className="text-lg">🏆</span>}
+                  </div>
+                </div>
+                {/* 카드 하단 액션 (분류 변경 / 삭제) */}
+                <div className="flex items-center justify-end gap-3 mt-3 pt-3 border-t border-slate-100">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleChangeCategory(item); }}
+                    className="text-xs text-slate-500 hover:text-[#1B3F8B] transition"
+                  >
+                    ✏️ 분류 변경
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDelete(item); }}
+                    className="text-xs text-slate-400 hover:text-red-500 transition"
+                  >
+                    🗑️ 삭제
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         {/* 생성 중 오버레이 */}
