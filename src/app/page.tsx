@@ -7,7 +7,7 @@ import type { User } from '@supabase/supabase-js';
 // ═══════════════════════════════════════════════
 // 타입
 // ═══════════════════════════════════════════════
-type View = 'loading' | 'home' | 'category' | 'scan' | 'confirm' | 'categorize' | 'preview' | 'quiz' | 'result';
+type View = 'loading' | 'home' | 'category' | 'problem-detail' | 'scan' | 'confirm' | 'categorize' | 'preview' | 'quiz' | 'result';
 type LoginTab = 'login' | 'signup' | 'reset';
 type HomeTab  = 'active' | 'mastered';
 
@@ -160,6 +160,7 @@ export default function Home() {
   const [subjects, setSubjects]         = useState<Record<string, number>>({});
   const [selectedIds, setSelectedIds]   = useState<Set<string>>(new Set());
   const [selectedCategoryKey, setSelectedCategoryKey] = useState<string>('');
+  const [selectedProblemId, setSelectedProblemId] = useState<string>('');
   const [noteLoading, setNoteLoading]   = useState(false);
   const [generating, setGenerating]     = useState(false);
 
@@ -611,6 +612,29 @@ export default function Home() {
     } catch { alert('분류 변경 중 오류가 발생했습니다.'); }
   };
 
+  // ─── 유사문제 추가 생성 (problem-detail에서 호출) ───
+  const handleGenerateMore = async (parent: WrongNoteItem) => {
+    if (!user) return;
+    setGenerating(true);
+    try {
+      const res = await fetch('/api/generate-similar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ originalItem: parent, device_id: user.id, count: 3 }),
+      });
+      const data = await res.json();
+      const items: WrongNoteItem[] = data.items || [];
+      if (items.length > 0) {
+        setPreviewItems(items);
+        setView('preview');
+        await loadWrongNote();
+      } else {
+        alert('유사문제 생성에 실패했습니다.');
+      }
+    } catch { alert('유사문제 생성 오류'); }
+    finally { setGenerating(false); }
+  };
+
   // ─── 항목 삭제 핸들러 (자식 cascade) ───
   const handleDelete = async (item: WrongNoteItem) => {
     if (!window.confirm('이 원본 문제와 유사문제까지 모두 삭제할까요?\n되돌릴 수 없습니다.')) return;
@@ -908,54 +932,201 @@ export default function Home() {
             return (
               <div
                 key={item.id}
-                className={`bg-white rounded-xl border-2 p-4 transition select-none ${
-                  done ? 'border-emerald-200' : 'border-slate-100'
+                onClick={() => { setSelectedProblemId(item.id); setView('problem-detail'); }}
+                className={`bg-white rounded-xl border-2 p-4 transition select-none cursor-pointer active:scale-[0.99] ${
+                  done ? 'border-emerald-200' : 'border-slate-100 hover:border-[#1B3F8B]/40'
                 }`}
               >
-                <div
-                  onClick={() => handleStartChildren(item)}
-                  className="cursor-pointer active:scale-[0.99]"
-                >
-                  <p className="text-sm text-slate-700 line-clamp-2 leading-relaxed mb-2">
-                    <MathText text={item.question_text} />
-                  </p>
-                  <div className="flex items-center justify-between gap-2">
-                    {hasKids ? (
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="text-slate-500">유사문제 {kids.length}개</span>
-                        <span className="text-slate-300">·</span>
-                        <span className="text-emerald-600 font-medium">{kidMastered}/{kids.length} 풀음</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1.5 text-xs text-amber-600">
-                        <span>🧠</span>
-                        <span className="font-medium">탭하면 유사문제 만들기</span>
-                      </div>
-                    )}
-                    {hasKids && !done && (
-                      <span className="text-xs bg-[#1B3F8B] text-white rounded-full px-2.5 py-1 font-medium">▶️ 풀기</span>
-                    )}
-                    {done && <span className="text-lg">🏆</span>}
-                  </div>
-                </div>
-                {/* 카드 하단 액션 (분류 변경 / 삭제) */}
-                <div className="flex items-center justify-end gap-3 mt-3 pt-3 border-t border-slate-100">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleChangeCategory(item); }}
-                    className="text-xs text-slate-500 hover:text-[#1B3F8B] transition"
-                  >
-                    ✏️ 분류 변경
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleDelete(item); }}
-                    className="text-xs text-slate-400 hover:text-red-500 transition"
-                  >
-                    🗑️ 삭제
-                  </button>
+                <p className="text-sm text-slate-700 line-clamp-2 leading-relaxed mb-2">
+                  <MathText text={item.question_text} />
+                </p>
+                <div className="flex items-center justify-between gap-2">
+                  {hasKids ? (
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="text-slate-500">유사문제 {kids.length}개</span>
+                      <span className="text-slate-300">·</span>
+                      <span className="text-emerald-600 font-medium">{kidMastered}/{kids.length} 풀음</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 text-xs text-amber-600">
+                      <span>🧠</span>
+                      <span className="font-medium">아직 유사문제 없음</span>
+                    </div>
+                  )}
+                  {done ? <span className="text-lg">🏆</span> : (
+                    <svg className="w-4 h-4 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
+                    </svg>
+                  )}
                 </div>
               </div>
             );
           })}
+        </div>
+
+        {/* 생성 중 오버레이 */}
+        {generating && (
+          <div className="fixed inset-0 bg-slate-900/30 flex items-center justify-center z-40">
+            <div className="bg-white rounded-xl px-6 py-4 shadow-lg text-sm text-slate-700">🧠 유사문제 만드는 중...</div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ─── 문제 상세 (학습 허브) ───
+  if (view === 'problem-detail') {
+    const item = wrongNote.find(i => i.id === selectedProblemId);
+    if (!item) {
+      // 데이터 사라진 경우 안전 복귀
+      setView('category');
+      return null;
+    }
+    const kids = childrenOf(item.id);
+    const remaining = kids.filter(c => !c.mastered);
+    const kidMastered = kids.filter(c => c.mastered).length;
+    const done = isParentDone(item);
+    const correctIdx = parseInt(normalizeAnswer(item.correct_answer) || '0', 10);
+    const meta = labelOf(categoryKeyOf(item));
+
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col max-w-lg mx-auto">
+        {/* 헤더 */}
+        <div className="bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
+          <button onClick={() => setView('category')} className="text-slate-400 hover:text-slate-600 transition">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/>
+            </svg>
+          </button>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-slate-400">📁 {meta.label}</p>
+            <h1 className="font-bold text-slate-800 text-sm">학습 허브</h1>
+          </div>
+          {done && <span className="text-2xl">🏆</span>}
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-32">
+          {/* 원본 문제 카드 */}
+          <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="bg-[#1B3F8B] text-white rounded-full px-2.5 py-0.5 font-semibold">원본</span>
+              <span className="text-slate-400">처음 틀린 문제</span>
+            </div>
+            <p className="text-sm text-slate-800 leading-relaxed">
+              <MathText text={item.question_text} />
+            </p>
+            {item.choices && item.choices.length > 0 && (
+              <div className="space-y-1.5">
+                {item.choices.map((c, idx) => {
+                  const isCorrect = (idx + 1) === correctIdx;
+                  return (
+                    <div
+                      key={idx}
+                      className={`text-sm rounded-lg px-3 py-2 border ${
+                        isCorrect
+                          ? 'bg-emerald-50 border-emerald-200 text-emerald-800 font-medium'
+                          : 'bg-slate-50 border-slate-100 text-slate-600'
+                      }`}
+                    >
+                      {isCorrect && <span className="mr-1">✅</span>}
+                      <MathText text={c} />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {item.question_type !== 'multiple_choice' && item.correct_answer && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-sm text-emerald-800">
+                <span className="font-semibold mr-1">✅ 정답:</span>
+                <MathText text={item.correct_answer} />
+              </div>
+            )}
+            {item.explanation && (
+              <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+                <p className="text-xs text-[#1B3F8B] font-semibold mb-1">💡 해설</p>
+                <p className="text-sm text-slate-700 leading-relaxed">
+                  <MathText text={item.explanation} />
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* 유사문제 섹션 */}
+          <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-slate-400">유사문제</p>
+                <p className="text-sm font-semibold text-slate-700">
+                  {kids.length === 0 ? '아직 없음' : `${kids.length}개 · ${kidMastered}/${kids.length} 풀음`}
+                </p>
+              </div>
+              {kids.length > 0 && (
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: kids.length }).map((_, i) => (
+                    <div
+                      key={i}
+                      className={`w-2.5 h-2.5 rounded-full ${
+                        i < kidMastered ? 'bg-emerald-400' : 'bg-slate-200'
+                      }`}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 액션 버튼들 */}
+            {kids.length === 0 ? (
+              <button
+                onClick={() => handleGenerateMore(item)}
+                disabled={generating}
+                className="w-full bg-[#1B3F8B] text-white rounded-xl py-3 text-sm font-bold hover:bg-[#163272] transition disabled:opacity-60"
+              >
+                {generating ? '🧠 만드는 중...' : '🧠 유사문제 3개 만들기'}
+              </button>
+            ) : (
+              <div className="space-y-2">
+                {remaining.length > 0 && (
+                  <button
+                    onClick={() => startQuiz(remaining, 'generated')}
+                    className="w-full bg-[#1B3F8B] text-white rounded-xl py-3 text-sm font-bold hover:bg-[#163272] transition"
+                  >
+                    ▶️ 안 풀어본 {remaining.length}개 풀기
+                  </button>
+                )}
+                {remaining.length === 0 && kids.length > 0 && (
+                  <button
+                    onClick={() => startQuiz(kids, 'generated')}
+                    className="w-full bg-emerald-600 text-white rounded-xl py-3 text-sm font-bold hover:bg-emerald-700 transition"
+                  >
+                    ♻️ 모두 풀었어! 다시 풀기
+                  </button>
+                )}
+                <button
+                  onClick={() => handleGenerateMore(item)}
+                  disabled={generating}
+                  className="w-full bg-white border border-slate-200 text-slate-600 rounded-xl py-2.5 text-sm font-medium hover:bg-slate-50 transition disabled:opacity-60"
+                >
+                  {generating ? '만드는 중...' : '🧠 유사문제 3개 더 만들기'}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* 관리 액션 */}
+          <div className="flex items-center justify-center gap-6 pt-2">
+            <button
+              onClick={() => handleChangeCategory(item)}
+              className="text-xs text-slate-500 hover:text-[#1B3F8B] transition"
+            >
+              ✏️ 분류 변경
+            </button>
+            <button
+              onClick={() => handleDelete(item)}
+              className="text-xs text-slate-400 hover:text-red-500 transition"
+            >
+              🗑️ 삭제
+            </button>
+          </div>
         </div>
 
         {/* 생성 중 오버레이 */}
