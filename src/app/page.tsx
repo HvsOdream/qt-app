@@ -21,6 +21,7 @@ interface WrongNoteItem {
   question_type: 'multiple_choice' | 'short_answer' | 'essay';
   correct_answer: string;
   explanation: string | null;
+  user_note: string | null;
   source: 'scan' | 'generated';
   parent_id: string | null;
   times_wrong: number;
@@ -635,6 +636,27 @@ export default function Home() {
     finally { setGenerating(false); }
   };
 
+  // ─── 사용자 메모 저장 (blur 시 자동) ───
+  const [noteSaveStatus, setNoteSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const handleSaveNote = async (id: string, note: string) => {
+    setNoteSaveStatus('saving');
+    try {
+      const res = await fetch(`/api/wrong-note/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_note: note }),
+      });
+      if (!res.ok) throw new Error();
+      // 로컬 state 즉시 갱신 (loadWrongNote 안 부르고 빠르게)
+      setWrongNote(prev => prev.map(it => it.id === id ? { ...it, user_note: note } : it));
+      setNoteSaveStatus('saved');
+      setTimeout(() => setNoteSaveStatus('idle'), 2000);
+    } catch {
+      setNoteSaveStatus('idle');
+      alert('메모 저장 실패');
+    }
+  };
+
   // ─── 항목 삭제 핸들러 (자식 cascade) ───
   const handleDelete = async (item: WrongNoteItem) => {
     if (!window.confirm('이 원본 문제와 유사문제까지 모두 삭제할까요?\n되돌릴 수 없습니다.')) return;
@@ -932,32 +954,51 @@ export default function Home() {
             return (
               <div
                 key={item.id}
-                onClick={() => { setSelectedProblemId(item.id); setView('problem-detail'); }}
-                className={`bg-white rounded-xl border-2 p-4 transition select-none cursor-pointer active:scale-[0.99] ${
-                  done ? 'border-emerald-200' : 'border-slate-100 hover:border-[#1B3F8B]/40'
+                className={`bg-white rounded-xl border-2 p-4 transition select-none ${
+                  done ? 'border-emerald-200' : 'border-slate-100'
                 }`}
               >
-                <p className="text-sm text-slate-700 line-clamp-2 leading-relaxed mb-2">
-                  <MathText text={item.question_text} />
-                </p>
-                <div className="flex items-center justify-between gap-2">
-                  {hasKids ? (
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="text-slate-500">유사문제 {kids.length}개</span>
-                      <span className="text-slate-300">·</span>
-                      <span className="text-emerald-600 font-medium">{kidMastered}/{kids.length} 풀음</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-1.5 text-xs text-amber-600">
-                      <span>🧠</span>
-                      <span className="font-medium">아직 유사문제 없음</span>
-                    </div>
-                  )}
-                  {done ? <span className="text-lg">🏆</span> : (
-                    <svg className="w-4 h-4 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
-                    </svg>
-                  )}
+                <div
+                  onClick={() => { setSelectedProblemId(item.id); setView('problem-detail'); }}
+                  className="cursor-pointer active:scale-[0.99]"
+                >
+                  <p className="text-sm text-slate-700 line-clamp-2 leading-relaxed mb-2">
+                    <MathText text={item.question_text} />
+                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    {hasKids ? (
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="text-slate-500">유사문제 {kids.length}개</span>
+                        <span className="text-slate-300">·</span>
+                        <span className="text-emerald-600 font-medium">{kidMastered}/{kids.length} 풀음</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 text-xs text-amber-600">
+                        <span>🧠</span>
+                        <span className="font-medium">아직 유사문제 없음</span>
+                      </div>
+                    )}
+                    {done ? <span className="text-lg">🏆</span> : (
+                      <svg className="w-4 h-4 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
+                      </svg>
+                    )}
+                  </div>
+                </div>
+                {/* 카드 하단 관리 액션 */}
+                <div className="flex items-center justify-end gap-3 mt-3 pt-3 border-t border-slate-100">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleChangeCategory(item); }}
+                    className="text-xs text-slate-500 hover:text-[#1B3F8B] transition"
+                  >
+                    ✏️ 분류 변경
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDelete(item); }}
+                    className="text-xs text-slate-400 hover:text-red-500 transition"
+                  >
+                    🗑️ 삭제
+                  </button>
                 </div>
               </div>
             );
@@ -1051,6 +1092,32 @@ export default function Home() {
             )}
           </div>
 
+          {/* 내 메모 (사용자 해설) */}
+          <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-slate-400 font-medium">📝 내 메모 / 해설</p>
+              <span className={`text-xs transition ${
+                noteSaveStatus === 'saving' ? 'text-slate-400' :
+                noteSaveStatus === 'saved' ? 'text-emerald-500' : 'opacity-0'
+              }`}>
+                {noteSaveStatus === 'saving' ? '저장 중...' : noteSaveStatus === 'saved' ? '✓ 저장됨' : ''}
+              </span>
+            </div>
+            <textarea
+              key={item.id}
+              defaultValue={item.user_note || ''}
+              placeholder="왜 틀렸는지, 어떻게 풀어야 하는지 적어두면 다시 볼 때 도움돼요."
+              onBlur={(e) => {
+                const newNote = e.target.value;
+                if (newNote !== (item.user_note || '')) {
+                  handleSaveNote(item.id, newNote);
+                }
+              }}
+              rows={3}
+              className="w-full text-sm text-slate-700 leading-relaxed border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-[#1B3F8B] transition resize-none"
+            />
+          </div>
+
           {/* 유사문제 섹션 */}
           <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
             <div className="flex items-center justify-between">
@@ -1112,19 +1179,13 @@ export default function Home() {
             )}
           </div>
 
-          {/* 관리 액션 */}
-          <div className="flex items-center justify-center gap-6 pt-2">
+          {/* 관리 액션 (분류 변경만 — 삭제는 폴더 안에서) */}
+          <div className="flex items-center justify-center pt-2">
             <button
               onClick={() => handleChangeCategory(item)}
               className="text-xs text-slate-500 hover:text-[#1B3F8B] transition"
             >
               ✏️ 분류 변경
-            </button>
-            <button
-              onClick={() => handleDelete(item)}
-              className="text-xs text-slate-400 hover:text-red-500 transition"
-            >
-              🗑️ 삭제
             </button>
           </div>
         </div>
