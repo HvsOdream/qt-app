@@ -98,7 +98,7 @@ function MathText({ text, className = '' }: { text: string; className?: string }
     .replace(/(?<![<\w])<(?![<=\w])/g, '＜')
     .replace(/(?<![<\w])>(?![>=\w])/g, '＞');
 
-  const parts = processed.split(/([a-zA-Z](?=[^a-zA-Z가-힣]|$))/g);
+  const parts = processed.split(/(?<![a-zA-Z가-힣0-9])([a-zA-Z])(?=[^a-zA-Z가-힣]|$)/g);
   const elements: React.ReactNode[] = [];
   parts.forEach((part, i) => {
     if (part && /^[a-zA-Z]$/.test(part)) {
