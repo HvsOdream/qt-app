@@ -45,7 +45,6 @@ const PARSE_PROMPT = `너는 시험 문제 분석 전문가야. 학생이 문제
       "question_text": "문제 본문 전체",
       "question_type": "multiple_choice 또는 short_answer 또는 essay",
       "choices": ["①선택지1", "②선택지2", "③선택지3", "④선택지4", "⑤선택지5"],
-      "marked_answer": "학생이 표시한 답 번호 (없으면 null)",
       "correct_answer": "정답 번호 (반드시 숫자 문자열: '1','2','3','4','5') 또는 주관식 정답 텍스트",
       "confidence": "정답 확신도 (high/medium/low)",
       "explanation": "정답 해설 — 왜 정답인지 + 다른 보기는 왜 오답인지 + 핵심 개념. 200~400자.",
@@ -77,7 +76,9 @@ const PARSE_PROMPT = `너는 시험 문제 분석 전문가야. 학생이 문제
 - choices가 없으면 (서술형/주관식) 빈 배열로
 - 수식에서 부등호는 반드시 ＜ ＞ ≤ ≥ (전각/유니코드)로 표현. HTML 태그로 해석될 수 있는 < > 사용 금지
 - 분수는 a/b, 거듭제곱은 a^n, 루트는 √ 기호 사용
-- 이미지에 문제가 아닌 내용(낙서, 메모)은 무시`;
+- 이미지에 문제가 아닌 내용(낙서, 메모)은 무시
+- ★ 개인정보 제외: 시험지에 적힌 이름·학번·수험번호·반/번호, 학생이 표시한 답(동그라미·체크·밑줄 등 풀이·채점 표시)과 점수는 읽더라도 **출력에 절대 포함하지 마라**. question_text와 choices에는 인쇄된 문제 내용만 넣는다
+- source_description에는 시험지 종류만 쓰고 학교명·학생 이름 등 개인을 알아볼 수 있는 내용은 쓰지 않는다`;
 
 export async function POST(request: NextRequest) {
   try {

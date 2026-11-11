@@ -34,7 +34,6 @@ interface WrongNoteItem {
 interface ParsedProblem {
   question_text: string;
   choices: string[];
-  marked_answer: string | null;
   correct_answer: string | null;
   explanation: string | null;
   subject: string;
