@@ -55,6 +55,13 @@ interface ConfirmItem {
   selected: boolean;
 }
 
+interface MyTrack {
+  id: string;
+  name: string;
+  kind: string;
+  units: string[];
+}
+
 interface QuizAnswer {
   itemId: string;
   isCorrect: boolean;
@@ -182,6 +189,13 @@ export default function Home() {
   const [categorySubject, setCategorySubject] = useState('');
   const [categoryTopic, setCategoryTopic]     = useState('');
 
+  // 학습 트랙 (수업 참여)
+  const [myTracks, setMyTracks]   = useState<MyTrack[]>([]);
+  const [joinOpen, setJoinOpen]   = useState(false);
+  const [joinCode, setJoinCode]   = useState('');
+  const [joinMsg, setJoinMsg]     = useState('');
+  const [joining, setJoining]     = useState(false);
+
   // ─── 미리보기 (생성된 유사문제) ───
   const [previewItems, setPreviewItems] = useState<WrongNoteItem[]>([]);
 
@@ -230,6 +244,52 @@ export default function Home() {
   useEffect(() => {
     if (view === 'home' && user) loadWrongNote();
   }, [view, user, loadWrongNote]);
+
+  // ════════════════════════════════════════
+  // 학습 트랙 (참여 코드로 수업에 연결)
+  // ════════════════════════════════════════
+  const loadMyTracks = useCallback(async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { setMyTracks([]); return; }
+      const res = await fetch('/api/track/mine', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const data = await res.json();
+      setMyTracks(data.tracks || []);
+    } catch { /* 트랙 없이도 앱은 그대로 동작 */ }
+  }, []);
+
+  useEffect(() => {
+    if (user) loadMyTracks();
+    else setMyTracks([]);
+  }, [user, loadMyTracks]);
+
+  async function handleJoinTrack() {
+    if (!joinCode.trim() || joining) return;
+    setJoining(true);
+    setJoinMsg('');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/track/join', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token || ''}`,
+        },
+        body: JSON.stringify({ code: joinCode }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setJoinMsg(data.error || '참여하지 못했어요'); return; }
+      setJoinCode('');
+      setJoinMsg(`「${data.track.name}」에 참여했어요`);
+      await loadMyTracks();
+    } catch {
+      setJoinMsg('서버에 연결하지 못했어요');
+    } finally {
+      setJoining(false);
+    }
+  }
 
   // ════════════════════════════════════════
   // 인증 함수
@@ -822,13 +882,62 @@ export default function Home() {
         <div className="bg-white border-b border-slate-100 px-4 py-3 flex items-center justify-between sticky top-0 z-20">
           <div className="flex items-center gap-2">
             <span className="text-[#1B3F8B] font-black text-lg tracking-tight">Bloom<span className="text-amber-500">Lens</span></span>
-            <span className="text-xs bg-[#1B3F8B]/10 text-[#1B3F8B] rounded-full px-2 py-0.5 font-medium">오답노트</span>
+            <span className="text-xs bg-[#1B3F8B]/10 text-[#1B3F8B] rounded-full px-2 py-0.5 font-medium whitespace-nowrap">오답노트</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-400 max-w-[120px] truncate">{user.email}</span>
-            <button onClick={handleLogout} className="text-xs text-slate-400 hover:text-slate-600 transition">로그아웃</button>
+            <button
+              onClick={() => { setJoinMsg(''); setJoinOpen(true); }}
+              className="text-xs text-[#1B3F8B] border border-[#1B3F8B]/30 rounded-full px-2.5 py-1 hover:bg-[#1B3F8B]/10 transition whitespace-nowrap shrink-0"
+            >
+              수업 참여{myTracks.length > 0 ? ` ${myTracks.length}` : ''}
+            </button>
+            <span className="text-xs text-slate-400 max-w-[90px] truncate hidden sm:inline">{user.email}</span>
+            <button onClick={handleLogout} className="text-xs text-slate-400 hover:text-slate-600 transition whitespace-nowrap shrink-0">로그아웃</button>
           </div>
         </div>
+
+        {/* 수업 참여 (참여 코드 입력) */}
+        {joinOpen && (
+          <div className="fixed inset-0 z-40 bg-black/40 flex items-end justify-center" onClick={() => setJoinOpen(false)}>
+            <div className="bg-white w-full max-w-lg rounded-t-2xl p-5 space-y-3" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between">
+                <h2 className="font-bold text-slate-800">수업 참여</h2>
+                <button onClick={() => setJoinOpen(false)} className="text-sm text-slate-400">닫기</button>
+              </div>
+              <p className="text-xs text-slate-500">교수님이 알려 준 참여 코드를 입력하면, 단원 입력 때 수업과 단원을 바로 고를 수 있어요.</p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={joinCode}
+                  onChange={e => setJoinCode(e.target.value.toUpperCase())}
+                  onKeyDown={e => e.key === 'Enter' && handleJoinTrack()}
+                  placeholder="참여 코드 6자리"
+                  maxLength={12}
+                  className="flex-1 border border-slate-200 rounded-lg px-3 py-2.5 text-sm font-mono tracking-widest outline-none focus:border-[#1B3F8B] transition"
+                />
+                <button
+                  onClick={handleJoinTrack}
+                  disabled={joining || !joinCode.trim()}
+                  className="bg-[#1B3F8B] text-white text-sm font-bold rounded-lg px-4 disabled:opacity-40"
+                >
+                  {joining ? '확인 중' : '참여'}
+                </button>
+              </div>
+              {joinMsg && <p className="text-xs text-[#1B3F8B]">{joinMsg}</p>}
+              {myTracks.length > 0 && (
+                <div className="space-y-1.5 pt-1">
+                  <p className="text-xs text-slate-400 font-medium">참여 중인 수업</p>
+                  {myTracks.map(t => (
+                    <div key={t.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2 text-sm">
+                      <span className="font-medium text-slate-700">{t.name}</span>
+                      <span className="text-xs text-slate-400">단원 {t.units.length}개</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* 탭 (학습중/완료) */}
         <div className="bg-white border-b border-slate-100 px-4 flex gap-0">
@@ -1441,6 +1550,46 @@ export default function Home() {
               >
                 과목: {suggestedSubject}
               </button>
+            </div>
+          )}
+
+          {/* 참여 중인 수업·단원 칩 */}
+          {myTracks.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-slate-400">내 수업:</span>
+                {myTracks.map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => { setCategorySubject(t.name); setCategoryTopic(''); }}
+                    className={`text-xs rounded-full px-3 py-1 transition ${
+                      categorySubject === t.name
+                        ? 'bg-[#1B3F8B] text-white'
+                        : 'bg-[#1B3F8B]/10 text-[#1B3F8B] hover:bg-[#1B3F8B] hover:text-white'
+                    }`}
+                  >
+                    {t.name}
+                  </button>
+                ))}
+              </div>
+              {(myTracks.find(t => t.name === categorySubject)?.units.length ?? 0) > 0 && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-slate-400">단원:</span>
+                  {myTracks.find(t => t.name === categorySubject)!.units.map(u => (
+                    <button
+                      key={u}
+                      onClick={() => setCategoryTopic(u)}
+                      className={`text-xs rounded-full px-3 py-1 transition ${
+                        categoryTopic === u
+                          ? 'bg-amber-500 text-white'
+                          : 'bg-amber-50 text-amber-700 hover:bg-amber-500 hover:text-white'
+                      }`}
+                    >
+                      {u}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
