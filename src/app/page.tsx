@@ -219,10 +219,28 @@ export default function Home() {
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-      if (session?.user) setView('home');
+      // 로그인 상태가 갱신될 때 보던 화면을 홈으로 되돌리지 않는다
+      if (session?.user) setView((v) => (v === 'loading' ? 'home' : v));
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  // ════════════════════════════════════════
+  // 자율 학습실에서 넘어온 경우(/?lab=1): 바로 스캔으로 가고, 끝나면 학습실로 돌아간다
+  // ════════════════════════════════════════
+  const [labMode] = useState(
+    () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('lab') === '1'
+  );
+  const labStarted = useRef(false);
+  useEffect(() => {
+    if (!labMode || !user || view !== 'home') return;
+    if (!labStarted.current) {
+      labStarted.current = true;
+      setView('scan');
+    } else {
+      window.location.href = '/lab';
+    }
+  }, [labMode, user, view]);
 
   // ════════════════════════════════════════
   // 오답노트 로드
@@ -1674,18 +1692,29 @@ export default function Home() {
         </div>
 
         <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white border-t border-slate-100 px-4 py-3 z-20 space-y-2">
-          <button
-            onClick={() => startQuiz(previewItems, 'generated')}
-            className="w-full bg-[#1B3F8B] text-white rounded-xl py-4 text-base font-bold hover:bg-[#163272] transition"
-          >
-            ▶️ 풀어보기
-          </button>
-          <button
-            onClick={() => { setSelectedIds(new Set()); setView('home'); }}
-            className="w-full bg-white border border-slate-200 text-slate-600 rounded-xl py-3 text-sm font-medium hover:bg-slate-50 transition"
-          >
-            나중에 풀게 (오답노트로 돌아가기)
-          </button>
+          {labMode ? (
+            <button
+              onClick={() => { window.location.href = '/lab'; }}
+              className="w-full bg-[#1B3F8B] text-white rounded-xl py-4 text-base font-bold hover:bg-[#163272] transition"
+            >
+              학습실로 돌아가기
+            </button>
+          ) : (
+            <>
+            <button
+              onClick={() => startQuiz(previewItems, 'generated')}
+              className="w-full bg-[#1B3F8B] text-white rounded-xl py-4 text-base font-bold hover:bg-[#163272] transition"
+            >
+              ▶️ 풀어보기
+            </button>
+            <button
+              onClick={() => { setSelectedIds(new Set()); setView('home'); }}
+              className="w-full bg-white border border-slate-200 text-slate-600 rounded-xl py-3 text-sm font-medium hover:bg-slate-50 transition"
+            >
+              나중에 풀게 (오답노트로 돌아가기)
+            </button>
+            </>
+          )}
         </div>
       </div>
     );
