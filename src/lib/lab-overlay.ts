@@ -119,9 +119,14 @@ export async function buildOverlay(supabase: SupabaseClient, session: LabSession
 
   // 공부시간 리그: 최근 8시간 안에 입실한 사람들의 체류 시간 순위(익명)
   const since = new Date(now - 8 * 60 * 60 * 1000).toISOString();
-  const { data: room } = await supabase
-    .from('lab_sessions').select('id, plan_at, checkout_at').gte('plan_at', since).order('plan_at');
-  const rows = (room || []).map((r, i) => ({
+  const { data: roomAll } = await supabase
+    .from('lab_sessions').select('id, user_id, plan_at, checkout_at').gte('plan_at', since).order('plan_at');
+  // 한 사람이 여러 번 들어왔으면 가장 최근 세션만 센다
+  const latestByUser = new Map<string, { id: string; plan_at: string; checkout_at: string | null }>();
+  (roomAll || []).forEach((r) => latestByUser.set(r.user_id, r));
+  latestByUser.set(session.user_id, session);
+  const room = [...latestByUser.values()].sort((a, b) => a.plan_at.localeCompare(b.plan_at));
+  const rows = room.map((r, i) => ({
     id: r.id,
     name: `학습자 ${i + 1}`,
     minutes: Math.floor(((r.checkout_at ? new Date(r.checkout_at).getTime() : now) - new Date(r.plan_at).getTime()) / 60000),

@@ -235,7 +235,11 @@ export default function LabPage() {
   // ─── 조건별 요소 값 (서버가 계산, 화면은 보관하지 않고 매번 받아 온다) ───
   const refreshOverlay = useCallback(async (): Promise<Overlay> => {
     try {
-      const o: Overlay = await api('/api/lab/overlay');
+      // 한 번 실패하면 잠깐 뒤에 한 번 더 받아 본다
+      const o: Overlay = await api('/api/lab/overlay').catch(async () => {
+        await new Promise((r) => setTimeout(r, 800));
+        return api('/api/lab/overlay');
+      });
       setOverlay(o);
       overlayKindRef.current = o.kind;
       if (o.kind === 'stim' && o.stim) {
@@ -261,7 +265,7 @@ export default function LabPage() {
       setCanReset(!!s.canReset);
       setError('');
       activeRef.current = !!s.session && !s.session.checkout_at;
-      if (activeRef.current) void refreshOverlay();
+      if (activeRef.current) await refreshOverlay(); // 조건 화면이 처음부터 제 모습으로 뜨게 먼저 받는다
       if (activeRef.current && !entered.current) { entered.current = true; log('app_fg', { screen: 'enter', standalone: isStandalone() }); }
       if (!s.session) setView('plan');
       else if (s.session.checkout_at) setView('done');
@@ -323,7 +327,9 @@ export default function LabPage() {
       setRestart(false);
       setCaptured([]);
       prevBonus.current = null;
-      void refreshOverlay();
+      // 이전 세션의 요소가 잠깐이라도 보이지 않게 비우고 새로 받는다
+      setOverlay({ kind: null }); overlayKindRef.current = null;
+      await refreshOverlay();
       log('app_fg', { screen: 'enter', standalone: isStandalone() });
       setView('home');
     } catch (e) { setError((e as Error).message); }
@@ -423,6 +429,7 @@ export default function LabPage() {
         method: 'POST', body: JSON.stringify({ reason, fatigue, t_ms_client: Date.now() }),
       });
       activeRef.current = false;
+      setOverlay({ kind: null }); overlayKindRef.current = null;
       setSession(r.session);
       setView('done');
     } catch (e) { setError((e as Error).message); }
