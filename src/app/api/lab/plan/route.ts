@@ -1,7 +1,7 @@
 // POST /api/lab/plan — 오늘 계획 저장 (= 입실, T0). 저장 뒤에는 고칠 수 없다.
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser, isTeacher } from '@/lib/teacher';
-import { ensureCondition, latestSession, logEvent, publicSession, LabSession } from '@/lib/lab';
+import { ensureCondition, getParticipant, latestSession, logEvent, publicSession, surveyItems, LabSession } from '@/lib/lab';
 
 export async function POST(req: NextRequest) {
   const { user, supabase } = await getAuthUser(req);
@@ -24,13 +24,27 @@ export async function POST(req: NextRequest) {
   }
 
   let condition = await ensureCondition(supabase, user.id);
+  const participant = await getParticipant(supabase, user.id);
+  // 입실 설문을 마쳐야 계획을 적을 수 있다
+  const hasSurvey = (await surveyItems(supabase)).some((i) => i.phase === 'in');
+  if (hasSurvey && !participant?.survey_done_at && !(isTeacher(user) && body.restart === true)) {
+    return NextResponse.json({ error: '입실 설문을 먼저 마쳐 주세요' }, { status: 409 });
+  }
+  // 코드로 들어온 참여자는 자기 블록이 열려 있을 때만 입실할 수 있다
+  if (participant?.block_id) {
+    const { data: block } = await supabase
+      .from('lab_blocks').select('opened_at, closed_at').eq('id', participant.block_id).maybeSingle();
+    if (!block?.opened_at || block?.closed_at) {
+      return NextResponse.json({ error: '지금은 학습실이 열려 있지 않아요' }, { status: 409 });
+    }
+  }
   // 관리자 테스트: 화면 종류를 골라 새 세션을 열 수 있다 (참여자 배정에는 영향 없음)
   if (isTeacher(user) && body.restart === true && ['A', 'B', 'C'].includes(body.condition)) {
     condition = body.condition;
   }
   const { data, error } = await supabase
     .from('lab_sessions')
-    .insert({ user_id: user.id, condition, track: track || null, plan_minutes: minutes })
+    .insert({ user_id: user.id, condition, track: track || null, plan_minutes: minutes, block_id: participant?.block_id || null })
     .select().single();
   if (error || !data) return NextResponse.json({ error: error?.message || '저장 실패' }, { status: 500 });
 

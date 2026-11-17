@@ -12,17 +12,20 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: '로그인이 필요합니다' }, { status: 401 });
   if (!isTeacher(user)) return NextResponse.json({ error: '권한이 없습니다' }, { status: 403 });
 
-  const kind = new URL(req.url).searchParams.get('kind') === 'sessions' ? 'sessions' : 'events';
-  const table = kind === 'sessions' ? 'lab_sessions' : 'lab_events';
-  const cols = kind === 'sessions'
-    ? ['id', 'user_id', 'condition', 'track', 'plan_minutes', 'plan_at', 'checkout_at', 'checkout_source', 'reason', 'fatigue']
+  const k = new URL(req.url).searchParams.get('kind');
+  const kind = k === 'sessions' || k === 'participants' ? k : 'events';
+  const table = kind === 'sessions' ? 'lab_sessions' : kind === 'participants' ? 'lab_participants' : 'lab_events';
+  const cols = kind === 'participants'
+    ? ['user_id', 'research_code', 'condition', 'block_id', 'survey_done_at', 'created_at']
+    : kind === 'sessions'
+    ? ['id', 'user_id', 'condition', 'track', 'block_id', 'plan_minutes', 'plan_at', 'checkout_at', 'checkout_source', 'reason', 'fatigue', 'survey_out']
     : ['id', 'user_id', 'session_id', 'condition', 'track', 't_server', 't_ms_client', 'type', 'item_id', 'payload'];
 
   const rows: Record<string, unknown>[] = [];
   for (let from = 0; ; from += 1000) {
     const { data, error } = await supabase
       .from(table).select(cols.join(','))
-      .order(kind === 'sessions' ? 'plan_at' : 'id').range(from, from + 999);
+      .order(kind === 'sessions' ? 'plan_at' : kind === 'participants' ? 'created_at' : 'id').range(from, from + 999);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     rows.push(...((data || []) as unknown as Record<string, unknown>[]));
     if (!data || data.length < 1000) break;

@@ -9,8 +9,9 @@ import Link from 'next/link';
 import type { User } from '@supabase/supabase-js';
 import MathText from '@/components/MathText';
 import InstallPrompt, { isStandalone } from '@/components/InstallPrompt';
+import { codeEmail } from '@/lib/lab';
 
-type View = 'loading' | 'login' | 'plan' | 'home' | 'practice' | 'checkout' | 'done';
+type View = 'loading' | 'login' | 'survey' | 'closed' | 'plan' | 'home' | 'practice' | 'checkout' | 'done';
 
 interface Session {
   id: string;
@@ -47,6 +48,8 @@ interface StimOverlay {
 interface Overlay { kind: null | 'support' | 'stim'; support?: SupportOverlay; stim?: StimOverlay }
 const LEVEL_NAMES = ['아직', '시도함', '익숙함', '능숙함', '숙달'];
 const LEVEL_COLORS = ['#E6EAF2', '#9DB4E3', '#6E91D6', '#3E6BC4', '#FFC94D'];
+
+interface QItem { id: string; text: string; type: string; min_label: string | null; max_label: string | null; unit: string | null }
 
 interface LabEvent { type: string; item_id?: string; payload?: Record<string, unknown>; t_ms_client: number }
 
@@ -113,6 +116,51 @@ const LevelBars = ({ level, w = 22 }: { level: number; w?: number }) => (
   </div>
 );
 
+// 설문 문항 하나의 응답 입력. 리커트는 누르면 바로 넘어가고, 숫자·날짜는 「다음」으로 넘긴다
+function AnswerInput({ item, value, onChange }: { item: QItem; value: string | number | undefined; onChange: (v: string | number) => void }) {
+  const chip = (on: boolean): React.CSSProperties => on
+    ? { border: `2px solid ${NAVY}`, background: '#E8EEFA', color: NAVY, fontWeight: 800 }
+    : { border: `1.5px solid ${LINE}`, background: '#fff', color: '#3C4B6B', fontWeight: 700 };
+  if (item.type.startsWith('likert')) {
+    const max = Number(item.type.slice(6));
+    return (
+      <div className="flex flex-col gap-2">
+        <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${max}, minmax(0, 1fr))` }}>
+          {Array.from({ length: max }, (_, i) => i + 1).map((n) => (
+            <button key={n} type="button" onClick={() => onChange(n)} className="h-12 rounded-xl text-[15px]" style={chip(value === n)}>{n}</button>
+          ))}
+        </div>
+        <div className="flex justify-between text-[11px]" style={{ color: SUB }}><span>{item.min_label || ''}</span><span>{item.max_label || ''}</span></div>
+      </div>
+    );
+  }
+  if (item.type === 'yesno') {
+    return (
+      <div className="grid grid-cols-2 gap-2">
+        {([['yes', '있어요'], ['no', '없어요']] as const).map(([k, label]) => (
+          <button key={k} type="button" onClick={() => onChange(k)} className="h-12 rounded-xl text-[15px]" style={chip(value === k)}>{label}</button>
+        ))}
+      </div>
+    );
+  }
+  if (item.type === 'date') {
+    return (
+      <div className="flex flex-col gap-2">
+        <input type="date" value={typeof value === 'string' && value !== 'undecided' ? value : ''} onChange={(e) => onChange(e.target.value)}
+          className="h-12 rounded-xl px-3 text-[15px] outline-none" style={{ border: `1.5px solid ${LINE}` }} />
+        <button type="button" onClick={() => onChange('undecided')} className="h-11 rounded-xl text-sm" style={chip(value === 'undecided')}>아직 정하지 않았어요</button>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-baseline gap-2">
+      <input type="number" inputMode="decimal" value={value ?? ''} onChange={(e) => onChange(e.target.value)} placeholder="0"
+        className="w-28 h-12 rounded-xl px-3 text-xl font-bold text-center outline-none" style={{ border: `1.5px solid ${LINE}` }} />
+      <span className="text-sm" style={{ color: SUB }}>{item.unit || ''}</span>
+    </div>
+  );
+}
+
 // 자극형 전용 효과음: 짧은 음 몇 개를 이어 낸다
 function chime(notes: number[]) {
   try {
@@ -152,6 +200,17 @@ export default function LabPage() {
   const [busy, setBusy] = useState(false);
   const [restart, setRestart] = useState(false); // 관리자 테스트용: 퇴실 뒤 새 세션
   const [adminCond, setAdminCond] = useState<'A' | 'B' | 'C'>('A');
+  // 익명 코드 로그인
+  const [code, setCode] = useState('');
+  const [pin, setPin] = useState('');
+  const [myCode, setMyCode] = useState<string | null>(null);
+  // 입실 설문
+  const [qItems, setQItems] = useState<QItem[]>([]);
+  const [qIndex, setQIndex] = useState(0);
+  const [qValue, setQValue] = useState<string | number | undefined>(undefined);
+  // 퇴실 설문
+  const [outItems, setOutItems] = useState<QItem[]>([]);
+  const [outAnswers, setOutAnswers] = useState<Record<string, string | number>>({});
   const [overlay, setOverlay] = useState<Overlay>({ kind: null });
   const [feedbackFor, setFeedbackFor] = useState(''); // 요소 값이 이 문항 응답까지 반영됐는지
   const [switchNote, setSwitchNote] = useState(''); // 지지형: 단원이 바뀔 때 한 줄
@@ -267,8 +326,17 @@ export default function LabPage() {
       activeRef.current = !!s.session && !s.session.checkout_at;
       if (activeRef.current) await refreshOverlay(); // 조건 화면이 처음부터 제 모습으로 뜨게 먼저 받는다
       if (activeRef.current && !entered.current) { entered.current = true; log('app_fg', { screen: 'enter', standalone: isStandalone() }); }
-      if (!s.session) setView('plan');
-      else if (s.session.checkout_at) setView('done');
+      setOutItems(s.outItems || []);
+      setMyCode(s.code || null);
+      if (s.session?.checkout_at) setView('done');
+      else if (!s.session && s.surveyNeeded) {
+        const q = await api('/api/lab/survey');
+        const answered = new Set<string>(q.answered || []);
+        const first = (q.items as QItem[]).findIndex((i) => !answered.has(i.id));
+        setQItems(q.items || []); setQIndex(Math.max(0, first)); setQValue(undefined);
+        setView(q.done ? 'plan' : 'survey');
+      }
+      else if (!s.session) setView(s.blockOpen ? 'plan' : 'closed');
       else setView((v) => (v === 'practice' || v === 'checkout' ? v : 'home'));
     } catch (e) {
       setError((e as Error).message);
@@ -283,6 +351,33 @@ export default function LabPage() {
       if (!u) setView('login'); else void load();
     });
   }, [load]);
+
+  // ─── 익명 코드 로그인 ───
+  const signIn = async () => {
+    if (!code.trim() || !pin.trim()) { setError('참여 코드와 PIN을 적어 주세요.'); return; }
+    setBusy(true); setError('');
+    const { data, error: err } = await supabase.auth.signInWithPassword({ email: codeEmail(code), password: pin.trim() });
+    setBusy(false);
+    if (err || !data.user) { setError('코드나 PIN이 맞지 않아요. 다시 확인해 주세요.'); return; }
+    setPin('');
+    setUser(data.user);
+    setView('loading');
+    void load();
+  };
+
+  // ─── 입실 설문: 한 문항씩, 답하면 바로 저장 ───
+  const submitAnswer = async (value: string | number) => {
+    const item = qItems[qIndex];
+    if (!item || busy) return;
+    setBusy(true); setError('');
+    try {
+      const r = await api('/api/lab/survey', { method: 'POST', body: JSON.stringify({ item_id: item.id, value, t_ms_client: Date.now() }) });
+      setQValue(undefined);
+      if (r.done || qIndex + 1 >= qItems.length) { setView('loading'); await load(); }
+      else setQIndex(qIndex + 1);
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
+  };
 
   // 앱이 화면에 보이는지: 포그라운드/백그라운드 전환을 남긴다
   useEffect(() => {
@@ -414,7 +509,7 @@ export default function LabPage() {
   // ─── 퇴실 ───
   const openCheckout = () => {
     void refreshOverlay();
-    setReason(''); setFatigue(0); setError('');
+    setReason(''); setFatigue(0); setError(''); setOutAnswers({});
     setNowText(hhmm(new Date()));
     log('checkout_open');
     setView('checkout');
@@ -422,11 +517,12 @@ export default function LabPage() {
   const cancelCheckout = () => { log('checkout_cancel'); setView('home'); };
   const confirmCheckout = async () => {
     if (!reason || !fatigue) { setError('이유와 지친 정도를 골라 주세요.'); return; }
+    if (outItems.some((i) => outAnswers[i.id] === undefined || outAnswers[i.id] === '')) { setError('아직 답하지 않은 문항이 있어요.'); return; }
     setBusy(true); setError('');
     try {
       await flush();
       const r = await api('/api/lab/checkout', {
-        method: 'POST', body: JSON.stringify({ reason, fatigue, t_ms_client: Date.now() }),
+        method: 'POST', body: JSON.stringify({ reason, fatigue, answers: outAnswers, t_ms_client: Date.now() }),
       });
       activeRef.current = false;
       setOverlay({ kind: null }); overlayKindRef.current = null;
@@ -463,10 +559,85 @@ export default function LabPage() {
   if (view === 'login') {
     return (
       <Frame>
+        <div className="px-5 pt-10 pb-6 flex flex-col gap-3.5 text-white" style={{ background: NAVY }}>
+          <div className="flex justify-between items-center">
+            <span className="text-lg font-extrabold tracking-tight">BloomLens</span>
+            <span className="text-xs font-bold rounded-xl px-2.5 py-1" style={{ background: 'rgba(255,255,255,0.16)' }}>자율 학습실</span>
+          </div>
+          <div className="text-2xl font-extrabold leading-snug">받은 참여 코드로<br />들어와 주세요</div>
+        </div>
+        <form className="p-5 flex flex-col gap-4 flex-1" onSubmit={(e) => { e.preventDefault(); void signIn(); }}>
+          <div className="bg-white rounded-[18px] p-5 flex flex-col gap-3.5 shadow-sm">
+            <label className="flex flex-col gap-1.5">
+              <span className="text-[13px] font-bold" style={{ color: SUB }}>참여 코드</span>
+              <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="R-001" autoCapitalize="characters" autoComplete="username"
+                className="h-12 rounded-xl px-3 text-lg font-bold outline-none" style={{ border: `1.5px solid ${LINE}` }} />
+            </label>
+            <label className="flex flex-col gap-1.5">
+              <span className="text-[13px] font-bold" style={{ color: SUB }}>PIN (숫자 6자리)</span>
+              <input value={pin} onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))} type="password" inputMode="numeric" autoComplete="current-password"
+                className="h-12 rounded-xl px-3 text-lg font-bold tracking-widest outline-none" style={{ border: `1.5px solid ${LINE}` }} />
+            </label>
+            <div className="text-xs leading-normal" style={{ color: SUB }}>이름·학번은 받지 않아요. 코드표에 적힌 코드와 PIN만 있으면 돼요.</div>
+          </div>
+          <ErrorLine />
+          <button type="submit" disabled={busy} className="h-14 rounded-[14px] text-white text-base font-bold disabled:opacity-50" style={{ background: NAVY }}>들어가기</button>
+          <Link href="/" className="text-center text-[13px] underline" style={{ color: SUB }}>참여 코드가 없으면 일반 계정으로 로그인</Link>
+        </form>
+      </Frame>
+    );
+  }
+
+  // ─── E0 입실 설문 ───
+  if (view === 'survey') {
+    const item = qItems[qIndex];
+    const total = qItems.length;
+    const auto = item && (item.type.startsWith('likert') || item.type === 'yesno');
+    return (
+      <Frame>
+        <InstallPrompt subtitle="학습실이 앱처럼 한 번에 열리고, 화면을 넓게 쓸 수 있어요" />
+        <div className="px-5 pt-10 pb-5 flex flex-col gap-3 text-white" style={{ background: NAVY }}>
+          <div className="flex justify-between items-center">
+            <span className="text-lg font-extrabold tracking-tight">BloomLens</span>
+            <span className="text-xs font-bold rounded-xl px-2.5 py-1" style={{ background: 'rgba(255,255,255,0.16)' }}>입실 전 설문</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.22)' }}>
+              <div className="h-full rounded-full bg-white" style={{ width: `${total ? Math.round((qIndex / total) * 100) : 0}%` }} />
+            </div>
+            <span className="text-xs font-bold">{Math.min(qIndex + 1, total)} / {total}</span>
+          </div>
+        </div>
+        <div className="p-5 flex flex-col gap-4 flex-1">
+          {item && (
+            <div className="bg-white rounded-[18px] p-5 flex flex-col gap-5 shadow-sm">
+              <div className="text-[17px] font-bold leading-relaxed">{item.text}</div>
+              <AnswerInput item={item} value={qValue} onChange={(v) => { setQValue(v); if (auto) void submitAnswer(v); }} />
+            </div>
+          )}
+          <div className="text-xs leading-relaxed px-1" style={{ color: SUB }}>정답이 없는 질문이에요. 응답은 점수나 순위에 쓰이지 않아요.</div>
+          <ErrorLine />
+        </div>
+        <div className="px-5 pb-7">
+          {item && !auto && (
+            <button type="button" disabled={busy || qValue === undefined || qValue === ''} onClick={() => qValue !== undefined && void submitAnswer(qValue)}
+              className="w-full h-14 rounded-[14px] text-white flex items-center justify-center gap-2 text-base font-bold disabled:opacity-40" style={{ background: NAVY }}>
+              다음 <Icon d={I.next} color="#fff" width={2.5} />
+            </button>
+          )}
+        </div>
+      </Frame>
+    );
+  }
+
+  // ─── 블록이 닫혀 있을 때 ───
+  if (view === 'closed') {
+    return (
+      <Frame>
         <div className="flex-1 flex flex-col items-center justify-center gap-4 px-8 text-center">
-          <div className="text-[22px] font-extrabold">자율 학습실</div>
-          <div className="text-sm leading-relaxed" style={{ color: SUB }}>먼저 BloomLens에 로그인해 주세요.<br />로그인한 뒤 이 주소로 다시 들어오면 돼요.</div>
-          <Link href="/" className="h-14 px-8 rounded-[14px] flex items-center font-bold text-white" style={{ background: NAVY }}>로그인하러 가기</Link>
+          <div className="text-[22px] font-extrabold">학습실이 아직 열리지 않았어요</div>
+          <div className="text-sm leading-relaxed" style={{ color: SUB }}>진행자가 학습실을 열면 들어올 수 있어요.<br />안내를 받은 뒤 아래 단추를 눌러 주세요.</div>
+          <button type="button" onClick={() => { setView('loading'); void load(); }} className="h-14 px-8 rounded-[14px] font-bold text-white" style={{ background: NAVY }}>다시 확인</button>
         </div>
       </Frame>
     );
@@ -907,6 +1078,13 @@ export default function LabPage() {
             <div className="flex justify-between text-[11px]" style={{ color: SUB }}><span>전혀 안 지침</span><span>매우 지침</span></div>
           </div>
 
+          {outItems.map((it) => (
+            <div key={it.id} className="bg-white rounded-[18px] px-5 py-[18px] flex flex-col gap-3 shadow-sm">
+              <div className="text-sm font-extrabold leading-relaxed">{it.text}</div>
+              <AnswerInput item={it} value={outAnswers[it.id]} onChange={(v) => setOutAnswers((p) => ({ ...p, [it.id]: v }))} />
+            </div>
+          ))}
+
           {stim && (
             <div className="rounded-[18px] px-5 py-4 flex items-center justify-between gap-3" style={{ background: '#FFF4EC', border: '1px solid #FFD2B3' }}>
               <div className="flex flex-col gap-0.5">
@@ -961,11 +1139,12 @@ export default function LabPage() {
               className="h-10 rounded-xl text-sm font-bold" style={{ border: `1.5px solid ${LINE}`, color: NAVY }}>테스트용 새 세션 시작</button>
             <div className="grid grid-cols-2 gap-2">
               <button type="button" onClick={() => download('events')} className="h-10 rounded-xl text-sm font-bold" style={{ border: `1.5px solid ${LINE}`, color: '#3C4B6B' }}>이벤트 CSV</button>
+              <Link href="/lab/staff" className="col-span-2 h-10 rounded-xl text-sm font-bold flex items-center justify-center" style={{ border: `1.5px solid ${LINE}`, color: NAVY }}>진행자 화면 열기</Link>
               <button type="button" onClick={() => download('sessions')} className="h-10 rounded-xl text-sm font-bold" style={{ border: `1.5px solid ${LINE}`, color: '#3C4B6B' }}>세션 CSV</button>
             </div>
           </div>
         )}
-        {user && <div className="text-[11px] mt-2" style={{ color: '#9AA6BF' }}>참여 코드 {user.id.slice(0, 8)}</div>}
+        {user && <div className="text-[11px] mt-2" style={{ color: '#9AA6BF' }}>참여 코드 {myCode || user.id.slice(0, 8)}</div>}
       </div>
     </Frame>
   );

@@ -1,7 +1,7 @@
 // GET /api/lab/state — 내 세션 상태, 과목 후보, 오늘 찍은 문제
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser, isTeacher } from '@/lib/teacher';
-import { ensureCondition, latestSession, logEvent, publicSession } from '@/lib/lab';
+import { ensureCondition, getParticipant, latestSession, logEvent, publicSession, surveyItems } from '@/lib/lab';
 
 export async function GET(req: NextRequest) {
   const { user, supabase } = await getAuthUser(req);
@@ -53,7 +53,32 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // 설문·블록 상태
+  const participant = await getParticipant(supabase, user.id);
+  const allItems = await surveyItems(supabase);
+  const inItems = allItems.filter((i) => i.phase === 'in');
+  const surveyNeeded = inItems.length > 0 && !participant?.survey_done_at;
+  let blockOpen = true; // 코드 없이 들어온 계정(교수자·일반)은 블록과 무관하게 쓸 수 있다
+  if (participant?.block_id) {
+    const { data: block } = await supabase
+      .from('lab_blocks').select('opened_at, closed_at').eq('id', participant.block_id).maybeSingle();
+    blockOpen = !!block?.opened_at && !block?.closed_at;
+  }
+  // 퇴실 때 묻는 문항: 입실과 같은 문항(also_out) → 퇴실 전용(out) → 조작점검(mc)
+  const pub = (i: (typeof allItems)[number]) => ({
+    id: i.id, text: i.text_ko, type: i.response_type, min_label: i.min_label, max_label: i.max_label, unit: i.unit,
+  });
+  const outItems = [
+    ...inItems.filter((i) => i.also_out),
+    ...allItems.filter((i) => i.phase === 'out'),
+    ...allItems.filter((i) => i.phase === 'mc'),
+  ].map(pub);
+
   return NextResponse.json({
+    surveyNeeded,
+    blockOpen,
+    outItems,
+    code: participant?.research_code || null,
     session: publicSession(session),
     subjects: [...subjects],
     captured,

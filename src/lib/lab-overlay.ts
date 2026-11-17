@@ -119,8 +119,11 @@ export async function buildOverlay(supabase: SupabaseClient, session: LabSession
 
   // 공부시간 리그: 최근 8시간 안에 입실한 사람들의 체류 시간 순위(익명)
   const since = new Date(now - 8 * 60 * 60 * 1000).toISOString();
-  const { data: roomAll } = await supabase
-    .from('lab_sessions').select('id, user_id, plan_at, checkout_at').gte('plan_at', since).order('plan_at');
+  // 블록이 있으면 같은 블록, 없으면 최근 8시간
+  const roomQuery = supabase.from('lab_sessions').select('id, user_id, plan_at, checkout_at');
+  const { data: roomAll } = await (session.block_id
+    ? roomQuery.eq('block_id', session.block_id)
+    : roomQuery.is('block_id', null).gte('plan_at', since)).order('plan_at');
   // 한 사람이 여러 번 들어왔으면 가장 최근 세션만 센다
   const latestByUser = new Map<string, { id: string; plan_at: string; checkout_at: string | null }>();
   (roomAll || []).forEach((r) => latestByUser.set(r.user_id, r));
