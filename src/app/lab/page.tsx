@@ -612,7 +612,10 @@ export default function LabPage() {
           {item && (
             <div className="bg-white rounded-[18px] p-5 flex flex-col gap-5 shadow-sm">
               <div className="text-[17px] font-bold leading-relaxed">{item.text}</div>
-              <AnswerInput item={item} value={qValue} onChange={(v) => { setQValue(v); if (auto) void submitAnswer(v); }} />
+              {/* 저장하는 동안에는 입력을 막는다: 다음 문항으로 넘어가며 입력이 지워지는 일을 막기 위해 */}
+              <div style={busy ? { pointerEvents: 'none', opacity: 0.5 } : undefined}>
+                <AnswerInput item={item} value={qValue} onChange={(v) => { setQValue(v); if (auto) void submitAnswer(v); }} />
+              </div>
             </div>
           )}
           <div className="text-xs leading-relaxed px-1" style={{ color: SUB }}>정답이 없는 질문이에요. 응답은 점수나 순위에 쓰이지 않아요.</div>
