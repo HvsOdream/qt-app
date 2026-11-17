@@ -211,6 +211,16 @@ export default function Home() {
   const [labMode] = useState(
     () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('lab') === '1'
   );
+  // 알림: 브라우저 경고 창 대신 화면 아래에 잠깐 띄운다 (경고 창은 화면을 통째로 멈춘다)
+  const notify = (text: string) => {
+    const el = document.createElement('div');
+    el.textContent = text;
+    el.setAttribute('role', 'alert');
+    el.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:200;background:#16213A;color:#fff;'
+      + 'padding:12px 16px;border-radius:12px;font-size:14px;line-height:1.5;max-width:90vw;box-shadow:0 8px 20px rgba(0,0,0,.25)';
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 4500);
+  };
   const labStarted = useRef(false);
   useEffect(() => {
     if (!labMode || !user || view !== 'home') return;
@@ -369,7 +379,7 @@ export default function Home() {
       setConfirmItems(items);
       setView('confirm');
     } catch (e) {
-      alert('이미지 분석에 실패했습니다. 다시 시도해주세요.');
+      notify('이미지 분석에 실패했습니다. 다시 시도해주세요.');
       console.error(e);
     } finally { setParsing(false); }
   };
@@ -382,7 +392,7 @@ export default function Home() {
   const handleSaveToWrongNote = async (generateAfter: boolean = false) => {
     if (!user) return;
     const toSave = confirmItems.filter(ci => ci.selected && ci.problem.correct_answer);
-    if (!toSave.length) { alert('저장할 문제를 선택해주세요.'); return; }
+    if (!toSave.length) { notify('저장할 문제를 선택해주세요.'); return; }
 
     setSaving(true);
     try {
@@ -429,7 +439,7 @@ export default function Home() {
             setPreviewItems(allGenerated);
             setView('preview');
           } else {
-            alert('저장은 됐는데 유사문제 생성은 실패했어요.');
+            notify('저장은 됐는데 유사문제 생성은 실패했어요.');
             setView('home');
           }
         } finally { setGenerating(false); }
@@ -437,7 +447,7 @@ export default function Home() {
         setView('home');
       }
     } catch (e) {
-      alert('저장에 실패했습니다.');
+      notify('저장에 실패했습니다.');
       console.error(e);
     } finally { setSaving(false); }
   };
@@ -494,10 +504,10 @@ export default function Home() {
         setPreviewItems(allGenerated);
         setView('preview');
       } else {
-        alert('유사문제 생성에 실패했습니다.');
+        notify('유사문제 생성에 실패했습니다.');
       }
     } catch {
-      alert('유사문제 생성 오류가 발생했습니다.');
+      notify('유사문제 생성 오류가 발생했습니다.');
     } finally { setGenerating(false); }
   };
 
@@ -584,10 +594,10 @@ export default function Home() {
         setPreviewItems(items);
         setView('preview');
       } else {
-        alert('유사문제 생성에 실패했습니다.');
+        notify('유사문제 생성에 실패했습니다.');
       }
     } catch {
-      alert('유사문제 생성 오류');
+      notify('유사문제 생성 오류');
     } finally { setGenerating(false); }
   };
 
@@ -669,7 +679,7 @@ export default function Home() {
         : `${newSubject.trim()}§${newTopic.trim()}`;
       if (view === 'category') setSelectedCategoryKey(newKey);
       await loadWrongNote();
-    } catch { alert('분류 변경 중 오류가 발생했습니다.'); }
+    } catch { notify('분류 변경 중 오류가 발생했습니다.'); }
   };
 
   // ─── 유사문제 추가 생성 (problem-detail에서 호출) ───
@@ -689,9 +699,9 @@ export default function Home() {
         setView('preview');
         await loadWrongNote();
       } else {
-        alert('유사문제 생성에 실패했습니다.');
+        notify('유사문제 생성에 실패했습니다.');
       }
-    } catch { alert('유사문제 생성 오류'); }
+    } catch { notify('유사문제 생성 오류'); }
     finally { setGenerating(false); }
   };
 
@@ -712,7 +722,7 @@ export default function Home() {
       setTimeout(() => setNoteSaveStatus('idle'), 2000);
     } catch {
       setNoteSaveStatus('idle');
-      alert('메모 저장 실패');
+      notify('메모 저장 실패');
     }
   };
 
@@ -730,7 +740,7 @@ export default function Home() {
         );
         if (remain.length === 0) setView('home');
       }
-    } catch { alert('삭제 중 오류가 발생했습니다.'); }
+    } catch { notify('삭제 중 오류가 발생했습니다.'); }
   };
 
   // ════════════════════════════════════════

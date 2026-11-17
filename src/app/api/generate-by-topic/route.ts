@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
     const anthropic = new Anthropic({ apiKey: process.env.CLAUDE_API_KEY });
 
     const message = await anthropic.messages.create({
-      model: 'claude-haiku-4-5',
+      model: 'claude-haiku-5-5',
       max_tokens: 4096,
       system: buildSystemPrompt(grade, subject, topic, keywords),
       messages: [
