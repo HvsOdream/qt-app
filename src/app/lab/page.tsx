@@ -421,8 +421,7 @@ export default function LabPage() {
         <div className="px-5 pt-4 pb-6 flex flex-col gap-3 flex-1">
           {/* 전체 새로 고침으로 넘어간다: 오답노트 화면이 주소의 lab=1 을 처음부터 읽어야 한다 */}
           <button type="button" onClick={async () => { log('capture_open'); await flush(); window.location.href = '/?lab=1'; }}
-            className="rounded-[18px] p-[18px] flex items-center gap-3.5 text-white text-left" style={{ background: INK }}> log('capture_open')}
-            className="rounded-[18px] p-[18px] flex items-center gap-3.5 text-white" style={{ background: INK }}>
+            className="rounded-[18px] p-[18px] flex items-center gap-3.5 text-white text-left" style={{ background: INK }}>
             <div className="w-[52px] h-[52px] rounded-[14px] flex items-center justify-center shrink-0" style={{ background: 'rgba(255,255,255,0.12)' }}>
               <Icon d={I.camera} size={26} color="#fff" width={2} />
             </div>
