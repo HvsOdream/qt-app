@@ -352,6 +352,27 @@ export default function LabPage() {
     });
   }, [load]);
 
+  // 리허설 중 진행자가 참여자로 들어온 경우: 맡겨 둔 진행자 로그인으로 돌아간다
+  const [staffReturn, setStaffReturn] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => { try { setStaffReturn(!!localStorage.getItem('lab_staff_return')); } catch { /* 저장소 사용 불가 */ } }, 0);
+    return () => clearTimeout(t);
+  }, []);
+  const backToStaff = async () => {
+    try {
+      await flush();
+      const saved = JSON.parse(localStorage.getItem('lab_staff_return') || 'null');
+      localStorage.removeItem('lab_staff_return');
+      if (saved) await supabase.auth.setSession(saved);
+    } catch { /* 돌아가지 못하면 진행자 화면에서 다시 로그인 */ }
+    window.location.href = '/lab/staff';
+  };
+  const StaffBar = () => staffReturn ? (
+    <button type="button" onClick={backToStaff} className="w-full h-8 text-[12px] font-bold text-white" style={{ background: '#B4440B' }}>
+      리허설: {myCode || '참여자'}(으)로 보는 중 · 진행자 화면으로 돌아가기
+    </button>
+  ) : null;
+
   // ─── 익명 코드 로그인 ───
   const signIn = async () => {
     if (!code.trim() || !pin.trim()) { setError('참여 코드와 PIN을 적어 주세요.'); return; }
@@ -559,6 +580,7 @@ export default function LabPage() {
   if (view === 'login') {
     return (
       <Frame>
+        <StaffBar />
         <div className="px-5 pt-10 pb-6 flex flex-col gap-3.5 text-white" style={{ background: NAVY }}>
           <div className="flex justify-between items-center">
             <span className="text-lg font-extrabold tracking-tight">BloomLens</span>
@@ -595,6 +617,7 @@ export default function LabPage() {
     const auto = item && (item.type.startsWith('likert') || item.type === 'yesno');
     return (
       <Frame>
+        <StaffBar />
         <InstallPrompt subtitle="학습실이 앱처럼 한 번에 열리고, 화면을 넓게 쓸 수 있어요" />
         <div className="px-5 pt-10 pb-5 flex flex-col gap-3 text-white" style={{ background: NAVY }}>
           <div className="flex justify-between items-center">
@@ -637,6 +660,7 @@ export default function LabPage() {
   if (view === 'closed') {
     return (
       <Frame>
+        <StaffBar />
         <div className="flex-1 flex flex-col items-center justify-center gap-4 px-8 text-center">
           <div className="text-[22px] font-extrabold">학습실이 아직 열리지 않았어요</div>
           <div className="text-sm leading-relaxed" style={{ color: SUB }}>진행자가 학습실을 열면 들어올 수 있어요.<br />안내를 받은 뒤 아래 단추를 눌러 주세요.</div>
@@ -650,6 +674,7 @@ export default function LabPage() {
   if (view === 'plan') {
     return (
       <Frame>
+        <StaffBar />
         <InstallPrompt subtitle="학습실이 앱처럼 한 번에 열리고, 화면을 넓게 쓸 수 있어요" />
         <div className="px-5 pt-10 pb-6 flex flex-col gap-3.5 text-white" style={{ background: NAVY }}>
           <div className="flex justify-between items-center">
@@ -723,6 +748,7 @@ export default function LabPage() {
   if (view === 'home') {
     return (
       <Frame>
+        <StaffBar />
         <div className="px-5 pt-10 pb-5 flex flex-col gap-3.5 text-white" style={{ background: NAVY }}>
           <div className="flex justify-between items-center">
             <span className="text-xs font-bold rounded-xl px-2.5 py-1" style={{ background: 'rgba(255,255,255,0.16)' }}>자율 학습실</span>
@@ -900,6 +926,7 @@ export default function LabPage() {
     const correctNum = normalizeAnswer(item?.correct_answer);
     return (
       <Frame bg="#FFFFFF">
+        <StaffBar />
         <div className="px-5 pt-10 flex items-center justify-between gap-3">
           <span className="text-xs rounded-lg px-2.5 py-1 truncate" style={{ color: SUB, background: '#EEF1F7' }}>
             {[item?.subject, item?.topic].filter(Boolean).join(' · ') || '비슷한 문제'}
@@ -1026,6 +1053,7 @@ export default function LabPage() {
   if (view === 'checkout') {
     return (
       <Frame>
+        <StaffBar />
         <div className="px-5 pt-10 flex items-center gap-3">
           <button type="button" aria-label="돌아가기" onClick={cancelCheckout} className="w-10 h-10 rounded-full bg-white flex items-center justify-center">
             <Icon d={I.back} color={INK} width={2.5} />
@@ -1118,6 +1146,7 @@ export default function LabPage() {
   // ─── 퇴실 뒤 ───
   return (
     <Frame>
+      <StaffBar />
       <div className="flex-1 flex flex-col items-center justify-center gap-3 px-8 text-center">
         <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{ background: '#E7F6EC' }}>
           <Icon d={I.check} size={28} color="#15803D" width={3} />

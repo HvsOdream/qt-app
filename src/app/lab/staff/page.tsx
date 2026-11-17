@@ -27,6 +27,8 @@ export default function StaffPage() {
   const [sheet, setSheet] = useState<{ block: string; rows: { code: string; pin: string }[] } | null>(null);
   const [importText, setImportText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [fixFor, setFixFor] = useState<{ id: string; time: string } | null>(null); // 퇴실 보정 입력 중인 세션
+  const [censorFor, setCensorFor] = useState(''); // 종료 처리 확인 중인 세션
 
   const call = useCallback(async (init?: RequestInit) => {
     const { data: s } = await supabase.auth.getSession();
@@ -57,6 +59,17 @@ export default function StaffPage() {
     if (!r.ok) { setMsg(r.json.error || '처리하지 못했어요'); return null; }
     await load();
     return r.json;
+  };
+
+  // 리허설용: PIN 없이 참여자 계정으로 들어간다. 진행자 로그인 정보는 돌아올 때 쓰도록 잠시 맡겨 둔다
+  const enterAs = async (code: string) => {
+    const { data: cur } = await supabase.auth.getSession();
+    const r = await act({ action: 'enter_as', code });
+    if (!r?.token_hash || !cur.session) return;
+    localStorage.setItem('lab_staff_return', JSON.stringify({ access_token: cur.session.access_token, refresh_token: cur.session.refresh_token }));
+    const { error } = await supabase.auth.verifyOtp({ token_hash: r.token_hash, type: 'magiclink' });
+    if (error) { localStorage.removeItem('lab_staff_return'); setMsg(`들어가지 못했어요: ${error.message}`); return; }
+    window.location.href = '/lab';
   };
 
   const download = async (kind: string) => {
@@ -151,23 +164,38 @@ export default function StaffPage() {
                         <td>{p.plan_minutes ?? '—'}</td>
                         <td>{p.status}{p.checkout_at ? ` ${hhmm(p.checkout_at)}${SOURCE[p.checkout_source || 'button']}` : ''}</td>
                         <td className="text-right">
-                          {p.session_id && !p.checkout_at && (
-                            <span className="inline-flex gap-1.5">
-                              <button className={btn} disabled={busy} onClick={() => {
-                                const time = window.prompt(`${p.code}의 실제 퇴실 시각 (시:분, 예 15:40)`);
-                                if (time) void act({ action: 'fix', session_id: p.session_id, time });
-                              }}>퇴실 보정</button>
-                              <button className={btn} disabled={busy} onClick={() => {
-                                if (window.confirm(`${p.code}을(를) 지금 시각으로 종료 처리할까요? (끝까지 남은 참여자)`)) void act({ action: 'censor', session_id: p.session_id });
-                              }}>종료 처리</button>
-                            </span>
-                          )}
-                          {!p.session_id && (
-                            <button className={btn} disabled={busy} onClick={async () => {
-                              const r = await act({ action: 'reset_pin', code: p.code });
-                              if (r?.made) setSheet({ block: b.label, rows: r.made });
-                            }}>PIN 다시 만들기</button>
-                          )}
+                          <span className="inline-flex gap-1.5 items-center">
+                            {p.session_id && !p.checkout_at && fixFor?.id === p.session_id && (
+                              <>
+                                <input type="time" value={fixFor.time} onChange={(e) => setFixFor({ id: p.session_id!, time: e.target.value })}
+                                  aria-label={`${p.code} 실제 퇴실 시각`} className="h-9 rounded-lg px-2 border border-slate-300 text-[13px]" />
+                                <button className={btn} disabled={busy || !fixFor.time}
+                                  onClick={async () => { if (await act({ action: 'fix', session_id: p.session_id, time: fixFor.time })) setFixFor(null); }}>저장</button>
+                                <button className={btn} onClick={() => setFixFor(null)}>취소</button>
+                              </>
+                            )}
+                            {p.session_id && !p.checkout_at && fixFor?.id !== p.session_id && censorFor !== p.session_id && (
+                              <>
+                                <button className={btn} disabled={busy} onClick={() => { setCensorFor(''); setFixFor({ id: p.session_id!, time: '' }); }}>퇴실 보정</button>
+                                <button className={btn} disabled={busy} onClick={() => { setFixFor(null); setCensorFor(p.session_id!); }}>종료 처리</button>
+                              </>
+                            )}
+                            {p.session_id && !p.checkout_at && censorFor === p.session_id && (
+                              <>
+                                <span className="text-[13px] text-slate-600">지금 시각으로 종료할까요?</span>
+                                <button className={btn} disabled={busy}
+                                  onClick={async () => { if (await act({ action: 'censor', session_id: p.session_id })) setCensorFor(''); }}>종료</button>
+                                <button className={btn} onClick={() => setCensorFor('')}>취소</button>
+                              </>
+                            )}
+                            {!p.session_id && (
+                              <button className={btn} disabled={busy} onClick={async () => {
+                                const r = await act({ action: 'reset_pin', code: p.code });
+                                if (r?.made) setSheet({ block: b.label, rows: r.made });
+                              }}>PIN 다시 만들기</button>
+                            )}
+                            {!p.checkout_at && <button className={btn} disabled={busy} onClick={() => enterAs(p.code)} title="리허설용: PIN 없이 이 참여자로 들어갑니다">이 참여자로 들어가기</button>}
+                          </span>
                         </td>
                       </tr>
                     ))}

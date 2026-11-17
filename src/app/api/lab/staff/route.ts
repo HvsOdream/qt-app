@@ -94,6 +94,16 @@ export async function POST(req: NextRequest) {
     return error ? NextResponse.json({ error: error.message }, { status: 500 }) : NextResponse.json({ made: [{ code: body.code, pin: newPin }] });
   }
 
+  // 리허설용: PIN 없이 그 참여자로 들어갈 수 있는 일회용 토큰을 만든다 (교수자만)
+  if (body.action === 'enter_as') {
+    const { data: p } = await supabase.from('lab_participants').select('user_id').eq('research_code', body.code).maybeSingle();
+    if (!p) return NextResponse.json({ error: '없는 코드예요' }, { status: 404 });
+    const { data, error } = await supabase.auth.admin.generateLink({ type: 'magiclink', email: codeEmail(String(body.code)) });
+    const token = data?.properties?.hashed_token;
+    if (error || !token) return NextResponse.json({ error: error?.message || '토큰을 만들지 못했어요' }, { status: 500 });
+    return NextResponse.json({ token_hash: token });
+  }
+
   // 미퇴실 처리: fix = 퇴실 시각 보정(HH:MM), censor = 종료 처리(완주)
   if (body.action === 'fix' || body.action === 'censor') {
     const { data: s } = await supabase.from('lab_sessions').select('*').eq('id', body.session_id).maybeSingle();
