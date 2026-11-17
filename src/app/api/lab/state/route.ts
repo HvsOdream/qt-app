@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
 
   // 오늘 찍은 문제: 입실(계획 저장) 뒤에 스캔으로 들어온 원본
   let captured: { id: string; question_text: string; topic: string | null; similar: number }[] = [];
-  let poolSize = 0;
+  const poolSize = (notes || []).filter((n) => n.source === 'generated').length;
   if (session) {
     const all = notes || [];
     const scans = all.filter((n) => n.source === 'scan' && n.created_at >= session.plan_at);
@@ -39,7 +39,6 @@ export async function GET(req: NextRequest) {
       id: n.id, question_text: n.question_text, topic: n.topic,
       similar: all.filter((c) => c.source === 'generated' && c.parent_id === n.id).length,
     }));
-    poolSize = all.filter((n) => n.source === 'generated').length;
 
     // 촬영 로그: 아직 기록되지 않은 원본만 한 번씩 남긴다
     if (!session.checkout_at && scans.length) {
