@@ -69,7 +69,7 @@ export default function StaffPage() {
     localStorage.setItem('lab_staff_return', JSON.stringify({ access_token: cur.session.access_token, refresh_token: cur.session.refresh_token }));
     const { error } = await supabase.auth.verifyOtp({ token_hash: r.token_hash, type: 'magiclink' });
     if (error) { localStorage.removeItem('lab_staff_return'); setMsg(`들어가지 못했어요: ${error.message}`); return; }
-    window.location.href = '/lab';
+    window.location.assign('/lab');
   };
 
   const download = async (kind: string) => {
