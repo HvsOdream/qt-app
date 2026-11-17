@@ -31,7 +31,13 @@ export async function GET(req: NextRequest) {
   const keep = Math.min(exclude.size, Math.max(0, pool.length - 1));
   const recent = [...exclude].slice(-keep);
   const fresh = pool.filter((n) => !recent.includes(n.id));
-  const candidates = fresh.length ? fresh : pool;
+  let candidates = fresh.length ? fresh : pool;
+  // 지지형: 추천 단원을 눌러 시작했으면 그 단원 문제를 먼저 낸다
+  const prefer = (new URL(req.url).searchParams.get('prefer') || '').trim();
+  if (session.condition === 'B' && prefer) {
+    const preferred = candidates.filter((n) => ((n.topic || '').trim() || '단원 없음') === prefer);
+    if (preferred.length) candidates = preferred;
+  }
 
   const tries = (n: { times_wrong: number; times_correct: number }) => n.times_wrong + n.times_correct;
   const min = Math.min(...candidates.map(tries));

@@ -31,6 +31,23 @@ interface Item {
   explanation: string | null;
   parent_id: string | null;
 }
+interface SupportOverlay {
+  goal: { reached: boolean; remaining: number; progress: number };
+  mastery: { topic: string; level: number; label: string }[];
+  recommend: { topic: string; hint: string } | null;
+  message: string;
+  last: { topic: string; level: number; label: string; from: number | null } | null;
+}
+interface StimOverlay {
+  xp: number; streak: number; best: number;
+  bonus: { reached: boolean; earned: number; nextIn: number; progress: number };
+  league: { rank: number; total: number; top: { rank: number; name: string; minutes: number; me: boolean }[]; gap: number | null };
+  last: { correct: boolean; gain: number; mult: number; streak: number } | null;
+}
+interface Overlay { kind: null | 'support' | 'stim'; support?: SupportOverlay; stim?: StimOverlay }
+const LEVEL_NAMES = ['아직', '시도함', '익숙함', '능숙함', '숙달'];
+const LEVEL_COLORS = ['#E6EAF2', '#9DB4E3', '#6E91D6', '#3E6BC4', '#FFC94D'];
+
 interface LabEvent { type: string; item_id?: string; payload?: Record<string, unknown>; t_ms_client: number }
 
 const NAVY = '#1B3F8B';
@@ -85,7 +102,35 @@ const I = {
   plus: ['M5 12h14M12 5v14'],
   check: ['M5 12l5 5L20 7'],
   x: ['M6 6l12 12M18 6L6 18'],
+  flame: ['M12 3c1 3 4 5 4 9a4 4 0 0 1-8 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-5 0-8z'],
 };
+
+const LevelBars = ({ level, w = 22 }: { level: number; w?: number }) => (
+  <div className="flex gap-1">
+    {[1, 2, 3, 4].map((i) => (
+      <span key={i} style={{ width: w, height: w > 20 ? 10 : 8, borderRadius: 3, background: i <= level ? LEVEL_COLORS[level] : '#E6EAF2' }} />
+    ))}
+  </div>
+);
+
+// 자극형 전용 효과음: 짧은 음 몇 개를 이어 낸다
+function chime(notes: number[]) {
+  try {
+    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const ctx = new Ctx();
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator(); const gain = ctx.createGain();
+      osc.type = 'sine'; osc.frequency.value = freq;
+      const t = ctx.currentTime + i * 0.11;
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t); osc.stop(t + 0.22);
+    });
+    setTimeout(() => { void ctx.close(); }, 900);
+  } catch { /* 소리를 낼 수 없는 환경 */ }
+}
 
 const Frame = ({ children, bg = '#F4F6FA' }: { children: React.ReactNode; bg?: string }) => (
   <div className="min-h-screen w-full flex justify-center" style={{ background: '#E9EDF5' }}>
@@ -106,6 +151,13 @@ export default function LabPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [restart, setRestart] = useState(false); // 관리자 테스트용: 퇴실 뒤 새 세션
+  const [adminCond, setAdminCond] = useState<'A' | 'B' | 'C'>('A');
+  const [overlay, setOverlay] = useState<Overlay>({ kind: null });
+  const [feedbackFor, setFeedbackFor] = useState(''); // 요소 값이 이 문항 응답까지 반영됐는지
+  const [switchNote, setSwitchNote] = useState(''); // 지지형: 단원이 바뀔 때 한 줄
+  const prefer = useRef('');
+  const lastTopic = useRef('');
+  const prevBonus = useRef<number | null>(null);
 
   // 계획
   const [minutes, setMinutes] = useState('');
@@ -119,6 +171,7 @@ export default function LabPage() {
   const [wasCorrect, setWasCorrect] = useState<boolean | null>(null);
   const [textAnswer, setTextAnswer] = useState('');
   const shownAt = useRef(0);
+  const overlayKindRef = useRef<Overlay['kind']>(null);
   const recent = useRef<string[]>([]);
   const answered = useRef(0);
 
@@ -164,6 +217,13 @@ export default function LabPage() {
     } catch { /* 다음 주기에 다시 */ }
     finally { flushing.current = false; }
   }, [api]);
+  // 대기 중인 로그를 다 보낼 때까지 기다린다 (서버가 방금 응답까지 보고 요소 값을 계산해야 할 때)
+  const flushAll = useCallback(async () => {
+    for (let i = 0; i < 8 && readQueue().length; i += 1) {
+      if (flushing.current) await new Promise((r) => setTimeout(r, 120));
+      else await flush();
+    }
+  }, [flush]);
   const log = useCallback((type: string, payload: Record<string, unknown> = {}, itemId?: string) => {
     if (!activeRef.current) return;
     const q = readQueue();
@@ -171,6 +231,24 @@ export default function LabPage() {
     writeQueue(q);
     void flush();
   }, [flush]);
+
+  // ─── 조건별 요소 값 (서버가 계산, 화면은 보관하지 않고 매번 받아 온다) ───
+  const refreshOverlay = useCallback(async (): Promise<Overlay> => {
+    try {
+      const o: Overlay = await api('/api/lab/overlay');
+      setOverlay(o);
+      overlayKindRef.current = o.kind;
+      if (o.kind === 'stim' && o.stim) {
+        const earned = o.stim.bonus.earned;
+        if (prevBonus.current !== null && earned > prevBonus.current) {
+          log('element', { kind: 'bonus', value: earned - prevBonus.current, mode: 'earn' });
+          chime([660, 880, 1100]);
+        }
+        prevBonus.current = earned;
+      }
+      return o;
+    } catch { return { kind: null }; }
+  }, [api, log]);
 
   // ─── 상태 불러오기 ───
   const load = useCallback(async () => {
@@ -183,6 +261,7 @@ export default function LabPage() {
       setCanReset(!!s.canReset);
       setError('');
       activeRef.current = !!s.session && !s.session.checkout_at;
+      if (activeRef.current) void refreshOverlay();
       if (activeRef.current && !entered.current) { entered.current = true; log('app_fg', { screen: 'enter', standalone: isStandalone() }); }
       if (!s.session) setView('plan');
       else if (s.session.checkout_at) setView('done');
@@ -191,7 +270,7 @@ export default function LabPage() {
       setError((e as Error).message);
       setView('plan');
     }
-  }, [api, log]);
+  }, [api, log, refreshOverlay]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -209,6 +288,25 @@ export default function LabPage() {
     return () => { document.removeEventListener('visibilitychange', onVis); clearInterval(timer); };
   }, [log, flush]);
 
+  // 홈에 있는 동안 요소 값을 1분마다 새로 받는다 (목표 바·보너스·리그가 시간에 따라 바뀐다)
+  const atHome = view === 'home';
+  const overlayKind = overlay.kind;
+  useEffect(() => {
+    if (!atHome || !overlayKind) return;
+    if (overlayKind === 'support') {
+      log('element', { kind: 'goalbar', mode: 'view' });
+      log('element', { kind: 'mastery', mode: 'view' });
+      log('element', { kind: 'meaning', mode: 'view', where: 'home' });
+    } else {
+      log('element', { kind: 'streak', mode: 'view' });
+      log('element', { kind: 'bonus', mode: 'view' });
+      log('element', { kind: 'league', mode: 'view' });
+      log('element', { kind: 'xp', mode: 'view' });
+    }
+    const t = setInterval(() => { void refreshOverlay(); }, 60000);
+    return () => clearInterval(t);
+  }, [atHome, overlayKind, log, refreshOverlay]);
+
   // ─── 계획 저장 (입실) ───
   const chosenTrack = track === '__custom' ? customTrack.trim() : track;
   const savePlan = async (restart = false) => {
@@ -218,12 +316,14 @@ export default function LabPage() {
     try {
       const r = await api('/api/lab/plan', {
         method: 'POST',
-        body: JSON.stringify({ minutes: m, track: chosenTrack, restart, t_ms_client: Date.now() }),
+        body: JSON.stringify({ minutes: m, track: chosenTrack, restart, condition: restart ? adminCond : undefined, t_ms_client: Date.now() }),
       });
       setSession(r.session);
       activeRef.current = true;
       setRestart(false);
       setCaptured([]);
+      prevBonus.current = null;
+      void refreshOverlay();
       log('app_fg', { screen: 'enter', standalone: isStandalone() });
       setView('home');
     } catch (e) { setError((e as Error).message); }
@@ -236,21 +336,32 @@ export default function LabPage() {
 
   // ─── 계속 풀기 ───
   const loadNext = useCallback(async () => {
-    setItemLoading(true); setPicked(null); setWasCorrect(null); setTextAnswer('');
+    setItemLoading(true); setPicked(null); setWasCorrect(null); setTextAnswer(''); setFeedbackFor('');
     try {
-      const r = await api(`/api/lab/next?exclude=${encodeURIComponent(recent.current.slice(-8).join(','))}`);
+      const r = await api(`/api/lab/next?exclude=${encodeURIComponent(recent.current.slice(-8).join(','))}&prefer=${encodeURIComponent(prefer.current)}`);
       setItem(r.item);
       if (r.item) {
         shownAt.current = Date.now();
         recent.current.push(r.item.id);
         log('item_shown', { parent_id: r.item.parent_id, topic: r.item.topic }, r.item.id);
+        const topic = (r.item.topic || '').trim();
+        if (overlayKindRef.current === 'support' && topic && lastTopic.current && topic !== lastTopic.current) {
+          setSwitchNote(`${topic} 단원으로 넘어왔어요. 아까 틀린 유형을 다른 숫자로 다시 만나 봅니다.`);
+          log('element', { kind: 'meaning', mode: 'view', where: 'switch', topic });
+        } else {
+          setSwitchNote('');
+        }
+        lastTopic.current = topic;
       }
     } catch (e) { setError((e as Error).message); setItem(null); }
     finally { setItemLoading(false); }
   }, [api, log]);
 
-  const startPractice = () => {
+  const startPractice = (topic = '') => {
     answered.current = 0;
+    prefer.current = topic;
+    lastTopic.current = '';
+    setSwitchNote('');
     log('practice_start');
     setView('practice');
     void loadNext();
@@ -272,10 +383,31 @@ export default function LabPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ attempts: [{ id: item.id, is_correct: correct }] }),
     }).catch(() => {});
+    // 조건별 요소: 방금 응답이 서버에 닿은 뒤 값을 다시 받는다 (전 조건이 문항마다 한 번씩 갱신)
+    if (overlayKindRef.current) {
+      void (async () => {
+        await flushAll();
+        const o = await refreshOverlay();
+        setFeedbackFor(item.id);
+        if (o.kind === 'stim' && o.stim?.last) {
+          const l = o.stim.last;
+          if (l.correct) {
+            log('element', { kind: 'xp', value: l.gain, mode: 'earn' });
+            if (l.mult > 1) log('element', { kind: 'combo', value: l.mult, mode: 'earn' });
+            chime(l.mult > 1 ? [784, 1047, 1319] : [784, 1047]);
+          }
+          log('element', { kind: 'streak', value: l.streak, mode: 'earn' });
+        }
+        if (o.kind === 'support' && o.support?.last) {
+          log('element', { kind: 'mastery', mode: 'view', where: 'feedback', topic: o.support.last.topic, level: o.support.last.level });
+        }
+      })();
+    }
   };
 
   // ─── 퇴실 ───
   const openCheckout = () => {
+    void refreshOverlay();
     setReason(''); setFatigue(0); setError('');
     setNowText(hhmm(new Date()));
     log('checkout_open');
@@ -312,6 +444,9 @@ export default function LabPage() {
   const ErrorLine = () => error
     ? <div role="alert" className="text-[13px] rounded-xl px-3 py-2" style={{ background: '#FDECEC', color: '#B42318' }}>{error}</div>
     : null;
+
+  const sup = overlay.kind === 'support' ? overlay.support : undefined;
+  const stim = overlay.kind === 'stim' ? overlay.stim : undefined;
 
   // ════════ 화면 ════════
   if (view === 'loading') {
@@ -415,13 +550,116 @@ export default function LabPage() {
               <Icon d={I.exit} size={16} color={NAVY} /> 퇴실
             </button>
           </div>
-          <div className="flex flex-col gap-0.5">
-            {session?.track && <div className="text-[13px] opacity-85">{session.track}</div>}
-            <div className="text-[22px] font-extrabold leading-snug">틀린 문제가 생기면<br />찍어서 다시 풀어 봐요</div>
-          </div>
+          {!sup && !stim && (
+            <div className="flex flex-col gap-0.5">
+              {session?.track && <div className="text-[13px] opacity-85">{session.track}</div>}
+              <div className="text-[22px] font-extrabold leading-snug">틀린 문제가 생기면<br />찍어서 다시 풀어 봐요</div>
+            </div>
+          )}
+
+          {/* B 지지형: 숙련도 요약 + 오늘 목표 진척 바 */}
+          {sup && (
+            <>
+              <div className="flex flex-col gap-0.5">
+                <div className="text-[13px] opacity-85">{[session?.track, '내 숙련도'].filter(Boolean).join(' · ')}</div>
+                <div className="text-[22px] font-extrabold leading-snug">
+                  {sup.recommend ? <>지금 가장 약한 단원은<br />{sup.recommend.topic}</> : <>틀린 문제가 생기면<br />찍어서 다시 풀어 봐요</>}
+                </div>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <div className="h-2.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.22)' }}>
+                  <div className="h-full rounded-full" style={{ width: `${Math.round(sup.goal.progress * 100)}%`, background: '#FFFFFF' }} />
+                </div>
+                <div className="text-xs opacity-90">{sup.goal.reached ? '오늘 계획한 시간을 채웠어요' : `목표까지 ${sup.goal.remaining}분`}</div>
+              </div>
+            </>
+          )}
+
+          {/* C 자극형: 연속 정답 스트릭 + 점수 */}
+          {stim && (
+            <div className="flex items-center gap-3.5">
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0" style={{ background: '#FF8A3D' }}>
+                <Icon d={I.flame} size={30} color="#fff" width={2} />
+              </div>
+              <div className="flex-1 flex flex-col gap-1">
+                <div className="text-[22px] font-extrabold">{stim.streak > 0 ? `${stim.streak}문제 연속 정답` : '연속 정답에 도전해요'}</div>
+                <div className="text-xs opacity-85">
+                  {stim.streak > 0 ? '스트릭이 끊기기 전에 이어 가세요' : '맞힐 때마다 스트릭이 쌓여요'} · 최고 기록 {stim.best}
+                </div>
+              </div>
+              <div className="flex flex-col items-end shrink-0">
+                <span className="text-[11px] opacity-80">점수</span>
+                <span className="text-xl font-extrabold">{stim.xp}</span>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="px-5 pt-4 pb-6 flex flex-col gap-3 flex-1">
+          {sup && (
+            <>
+              <div className="rounded-[14px] px-3.5 py-3 text-[13px] leading-relaxed bg-white shadow-sm" style={{ color: '#3C4B6B' }}>{sup.message}</div>
+              {sup.recommend && hasPool && (
+                <button type="button" onClick={() => startPractice(sup.recommend!.topic)}
+                  className="bg-white rounded-[18px] px-[18px] py-4 flex flex-col gap-2.5 text-left" style={{ border: `2px solid ${NAVY}` }}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold rounded-lg px-2 py-[3px]" style={{ color: NAVY, background: '#E8EEFA' }}>다음 연습 추천</span>
+                    <Icon d={I.next} size={16} color={NAVY} width={2} />
+                  </div>
+                  <div className="text-base font-extrabold">{sup.recommend.topic}</div>
+                  <div className="text-xs" style={{ color: SUB }}>{sup.recommend.hint}</div>
+                </button>
+              )}
+              {sup.mastery.length > 0 && (
+                <div className="bg-white rounded-2xl px-4 py-1.5 shadow-sm flex flex-col">
+                  {sup.mastery.map((m, i) => (
+                    <div key={m.topic} className="flex items-center gap-3 py-3" style={i < sup.mastery.length - 1 ? { borderBottom: '1px solid #EEF1F7' } : undefined}>
+                      <div className="flex-1 text-sm font-bold truncate">{m.topic}</div>
+                      <LevelBars level={m.level} />
+                      <span className="w-11 text-[11px] font-bold text-right" style={{ color: m.level >= 2 ? '#3E6BC4' : SUB }}>{m.label}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {stim && (
+            <>
+              <div className="rounded-2xl px-4 py-3.5 flex flex-col gap-2.5" style={{ background: '#FFF4EC', border: '1px solid #FFD2B3' }}>
+                <div className="flex justify-between items-baseline">
+                  <div className="text-sm font-extrabold">목표 보너스</div>
+                  <div className="text-[13px] font-extrabold" style={{ color: '#B4440B' }}>{stim.bonus.reached ? `받은 보너스 +${stim.bonus.earned}` : '+50'}</div>
+                </div>
+                <div className="h-2.5 rounded-full overflow-hidden" style={{ background: '#FFE3CF' }}>
+                  <div className="h-full" style={{ width: `${Math.round(stim.bonus.progress * 100)}%`, background: '#FF8A3D' }} />
+                </div>
+                <div className="text-xs" style={{ color: '#6B3A16' }}>
+                  {stim.bonus.reached
+                    ? `계획한 시간을 넘겼어요 · ${stim.bonus.nextIn}분 뒤 +10`
+                    : `계획한 시간의 ${Math.round(stim.bonus.progress * 100)}% 지점 · 끝까지 가면 보너스`}
+                </div>
+              </div>
+              <div className="bg-white rounded-2xl px-4 py-3.5 shadow-sm flex flex-col gap-2.5">
+                <div className="flex justify-between items-center">
+                  <div className="text-sm font-extrabold">오늘 공부시간 리그</div>
+                  <span className="text-[11px]" style={{ color: SUB }}>이 방 {stim.league.total}명 · 익명</span>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  {stim.league.top.map((r) => (
+                    <div key={r.rank} className="flex items-center gap-2.5 text-[13px]"
+                      style={r.me ? { background: '#E8EEFA', borderRadius: 10, padding: '8px 10px', margin: '0 -10px', color: NAVY } : undefined}>
+                      <span className="w-[18px] font-extrabold" style={{ color: r.me ? NAVY : SUB }}>{r.rank}</span>
+                      <span className="flex-1" style={r.me ? { fontWeight: 700 } : undefined}>{r.name}</span>
+                      <span className="font-bold">{r.minutes}분</span>
+                    </div>
+                  ))}
+                </div>
+                {stim.league.gap !== null && <div className="text-[11px]" style={{ color: SUB }}>{stim.league.rank - 1}위까지 {stim.league.gap}분</div>}
+              </div>
+            </>
+          )}
+
           {/* 전체 새로 고침으로 넘어간다: 오답노트 화면이 주소의 lab=1 을 처음부터 읽어야 한다 */}
           <button type="button" onClick={async () => { log('capture_open'); await flush(); window.location.href = '/?lab=1'; }}
             className="rounded-[18px] p-[18px] flex items-center gap-3.5 text-white text-left" style={{ background: INK }}>
@@ -434,7 +672,7 @@ export default function LabPage() {
             </div>
           </button>
 
-          <button type="button" onClick={startPractice} disabled={!hasPool}
+          <button type="button" onClick={() => startPractice()} disabled={!hasPool}
             className="bg-white rounded-[18px] px-[18px] py-4 flex items-center gap-3.5 text-left shadow-sm disabled:opacity-60">
             <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ background: '#E8EEFA' }}>
               <Icon d={I.play} size={22} color={NAVY} width={2} />
@@ -442,7 +680,7 @@ export default function LabPage() {
             <div className="flex-1 flex flex-col gap-0.5">
               <div className="text-[15px] font-extrabold">비슷한 문제 계속 풀기</div>
               <div className="text-xs" style={{ color: SUB }}>
-                {hasPool ? '원할 때까지, 그만두고 싶을 때 멈추면 돼요' : '문제를 찍으면 비슷한 문제가 만들어져요'}
+                {!hasPool ? '문제를 찍으면 비슷한 문제가 만들어져요' : stim ? '맞힐 때마다 +10 · 스트릭 이어 가기' : '원할 때까지, 그만두고 싶을 때 멈추면 돼요'}
               </div>
             </div>
             <Icon d={I.next} size={16} color="#9AA6BF" width={2} />
@@ -498,6 +736,9 @@ export default function LabPage() {
           )}
           {!itemLoading && item && (
             <>
+              {sup && switchNote && (
+                <div className="rounded-[14px] px-3.5 py-2.5 text-xs leading-relaxed" style={{ background: '#F4F6FA', color: '#3C4B6B' }}>{switchNote}</div>
+              )}
               <div>
                 <span className="text-[11px] font-bold rounded-lg px-2 py-[3px]" style={{ color: '#92400E', background: '#FDEBC8' }}>찍은 문제와 비슷한 문제</span>
               </div>
@@ -552,6 +793,35 @@ export default function LabPage() {
                     {wasCorrect ? '맞았어요' : `틀렸어요 · 정답 ${isMultiple ? correctNum + '번' : item.correct_answer}`}
                   </div>
                   {item.explanation && <div className="text-[13px] leading-relaxed whitespace-pre-wrap" style={{ color: '#3C4B6B' }}><MathText text={item.explanation} /></div>}
+                </div>
+              )}
+
+              {/* 정답 피드백 카드: 이 한 곳만 조건에 따라 달라진다 */}
+              {picked !== null && feedbackFor === item.id && sup?.last && (
+                <div className="rounded-[14px] px-3.5 py-3 flex items-center gap-3" style={{ background: '#F4F6FA' }}>
+                  <LevelBars level={sup.last.level} w={18} />
+                  <div className="text-xs" style={{ color: '#3C4B6B' }}>
+                    {sup.last.topic}{' '}
+                    <span className="font-extrabold" style={{ color: NAVY }}>
+                      {sup.last.from !== null ? `${LEVEL_NAMES[sup.last.from]} → ${sup.last.label}` : sup.last.label}
+                    </span>
+                    {sup.last.from !== null && sup.last.from < sup.last.level ? ' 올랐어요' : ''}
+                  </div>
+                </div>
+              )}
+              {picked !== null && feedbackFor === item.id && stim && (
+                <div className="rounded-[14px] px-3.5 py-3 flex items-center gap-3" style={{ background: '#FFF4EC', border: '1px solid #FFD2B3' }}>
+                  <span className="text-base font-extrabold animate-bounce-in" style={{ color: '#B4440B' }}>
+                    {stim.last?.correct ? `+${stim.last.gain}` : '+0'}
+                  </span>
+                  <div className="flex-1 text-xs" style={{ color: '#6B3A16' }}>
+                    {[
+                      stim.last?.correct && stim.last.mult > 1 ? `콤보 ×${stim.last.mult}` : null,
+                      stim.streak > 0 ? `${stim.streak}연속` : '스트릭이 끊겼어요',
+                      stim.bonus.reached ? `다음 보너스까지 ${stim.bonus.nextIn}분` : `목표 보너스까지 ${stim.bonus.nextIn}분`,
+                      `리그 ${stim.league.rank}위`,
+                    ].filter(Boolean).join(' · ')}
+                  </div>
                 </div>
               )}
             </>
@@ -630,6 +900,18 @@ export default function LabPage() {
             <div className="flex justify-between text-[11px]" style={{ color: SUB }}><span>전혀 안 지침</span><span>매우 지침</span></div>
           </div>
 
+          {stim && (
+            <div className="rounded-[18px] px-5 py-4 flex items-center justify-between gap-3" style={{ background: '#FFF4EC', border: '1px solid #FFD2B3' }}>
+              <div className="flex flex-col gap-0.5">
+                <div className="text-sm font-extrabold">{stim.bonus.reached ? `목표 보너스 +${stim.bonus.earned}` : `목표 보너스까지 ${stim.bonus.nextIn}분`}</div>
+                <div className="text-xs" style={{ color: '#6B3A16' }}>{stim.bonus.reached ? `${stim.bonus.nextIn}분 뒤 +10 더` : '지금 나가면 보너스는 없어요'}</div>
+              </div>
+              <div className="text-right shrink-0">
+                <div className="text-[11px]" style={{ color: '#6B3A16' }}>공부시간 리그</div>
+                <div className="text-[17px] font-extrabold" style={{ color: '#B4440B' }}>{stim.league.rank}위 / {stim.league.total}명</div>
+              </div>
+            </div>
+          )}
           <ErrorLine />
           <div className="text-xs leading-relaxed px-1" style={{ color: SUB }}>퇴실을 누르면 오늘 기록이 저장돼요. 참여는 오늘 한 번으로 끝나요.</div>
         </div>
@@ -658,6 +940,16 @@ export default function LabPage() {
         {canReset && (
           <div className="mt-6 w-full rounded-[14px] p-4 flex flex-col gap-2 text-left" style={{ border: `1.5px dashed ${LINE}` }}>
             <div className="text-xs font-bold" style={{ color: SUB }}>관리자 전용 (참여자에게는 보이지 않음)</div>
+            <div className="grid grid-cols-3 gap-2">
+              {([['A', '기본'], ['B', '지지형'], ['C', '자극형']] as const).map(([c, name]) => (
+                <button key={c} type="button" onClick={() => setAdminCond(c)} className="h-9 rounded-xl text-[13px]"
+                  style={adminCond === c
+                    ? { border: `2px solid ${NAVY}`, background: '#E8EEFA', color: NAVY, fontWeight: 700 }
+                    : { border: `1.5px solid ${LINE}`, color: '#3C4B6B' }}>
+                  {name}
+                </button>
+              ))}
+            </div>
             <button type="button" onClick={() => { setMinutes(''); setTrack(''); setRestart(true); setView('plan'); }}
               className="h-10 rounded-xl text-sm font-bold" style={{ border: `1.5px solid ${LINE}`, color: NAVY }}>테스트용 새 세션 시작</button>
             <div className="grid grid-cols-2 gap-2">

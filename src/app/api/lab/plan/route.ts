@@ -23,7 +23,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '오늘 참여는 이미 끝났어요' }, { status: 409 });
   }
 
-  const condition = await ensureCondition(supabase, user.id);
+  let condition = await ensureCondition(supabase, user.id);
+  // 관리자 테스트: 화면 종류를 골라 새 세션을 열 수 있다 (참여자 배정에는 영향 없음)
+  if (isTeacher(user) && body.restart === true && ['A', 'B', 'C'].includes(body.condition)) {
+    condition = body.condition;
+  }
   const { data, error } = await supabase
     .from('lab_sessions')
     .insert({ user_id: user.id, condition, track: track || null, plan_minutes: minutes })
