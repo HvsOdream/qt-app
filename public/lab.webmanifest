@@ -1,0 +1,16 @@
+{
+  "name": "BloomLens 자율 학습실",
+  "short_name": "BloomLens",
+  "description": "틀린 문제를 찍어 비슷한 문제로 다시 풀어 보는 학습 도구",
+  "id": "/lab",
+  "start_url": "/lab",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#1B3F8B",
+  "theme_color": "#1B3F8B",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

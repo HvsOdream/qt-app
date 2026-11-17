@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 
@@ -15,6 +15,15 @@ const nanum = localFont({
 export const metadata: Metadata = {
   title: "BloomLens — AI 개인화 학습 도구",
   description: "오답노트가 베이스, 유사문제 생성기가 도구. 서일대학교만의 특별한 AI 학습법.",
+  manifest: "/manifest.json",
+  appleWebApp: { capable: true, title: "BloomLens", statusBarStyle: "default" },
+  icons: { apple: "/apple-touch-icon.png" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#1B3F8B",
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({

@@ -7,6 +7,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import type { User } from '@supabase/supabase-js';
+import MathText from '@/components/MathText';
+import InstallPrompt, { isStandalone } from '@/components/InstallPrompt';
 
 type View = 'loading' | 'login' | 'plan' | 'home' | 'practice' | 'checkout' | 'done';
 
@@ -181,7 +183,7 @@ export default function LabPage() {
       setCanReset(!!s.canReset);
       setError('');
       activeRef.current = !!s.session && !s.session.checkout_at;
-      if (activeRef.current && !entered.current) { entered.current = true; log('app_fg', { screen: 'enter' }); }
+      if (activeRef.current && !entered.current) { entered.current = true; log('app_fg', { screen: 'enter', standalone: isStandalone() }); }
       if (!s.session) setView('plan');
       else if (s.session.checkout_at) setView('done');
       else setView((v) => (v === 'practice' || v === 'checkout' ? v : 'home'));
@@ -222,7 +224,7 @@ export default function LabPage() {
       activeRef.current = true;
       setRestart(false);
       setCaptured([]);
-      log('app_fg', { screen: 'enter' });
+      log('app_fg', { screen: 'enter', standalone: isStandalone() });
       setView('home');
     } catch (e) { setError((e as Error).message); }
     finally { setBusy(false); }
@@ -332,6 +334,7 @@ export default function LabPage() {
   if (view === 'plan') {
     return (
       <Frame>
+        <InstallPrompt subtitle="학습실이 앱처럼 한 번에 열리고, 화면을 넓게 쓸 수 있어요" />
         <div className="px-5 pt-10 pb-6 flex flex-col gap-3.5 text-white" style={{ background: NAVY }}>
           <div className="flex justify-between items-center">
             <span className="text-lg font-extrabold tracking-tight">BloomLens</span>
@@ -498,7 +501,7 @@ export default function LabPage() {
               <div>
                 <span className="text-[11px] font-bold rounded-lg px-2 py-[3px]" style={{ color: '#92400E', background: '#FDEBC8' }}>찍은 문제와 비슷한 문제</span>
               </div>
-              <div className="text-lg leading-normal font-bold whitespace-pre-wrap">{item.question_text}</div>
+              <div className="text-lg leading-normal font-bold whitespace-pre-wrap"><MathText text={item.question_text} /></div>
 
               {isMultiple ? (
                 <div className="flex flex-col gap-2.5">
@@ -524,7 +527,7 @@ export default function LabPage() {
                       <button key={idx} type="button" disabled={picked !== null} onClick={() => answer(num, isAnswer)}
                         className="min-h-[52px] px-4 py-3 rounded-[14px] text-[15px] text-left flex gap-3 items-center" style={st}>
                         <span className="w-[26px] h-[26px] rounded-full flex items-center justify-center text-xs font-bold shrink-0" style={badge}>{mark}</span>
-                        <span className="whitespace-pre-wrap">{choice.replace(/^\s*[①-⑤]\s*|^\s*\d+[.)]\s*/, '')}</span>
+                        <span className="whitespace-pre-wrap"><MathText text={choice.replace(/^\s*(?:[①-⑤]\s*|\d[.)]\s+)/, '')} /></span>
                       </button>
                     );
                   })}
@@ -548,7 +551,7 @@ export default function LabPage() {
                   <div className="text-sm font-extrabold" style={{ color: wasCorrect ? '#15803D' : '#B42318' }}>
                     {wasCorrect ? '맞았어요' : `틀렸어요 · 정답 ${isMultiple ? correctNum + '번' : item.correct_answer}`}
                   </div>
-                  {item.explanation && <div className="text-[13px] leading-relaxed whitespace-pre-wrap" style={{ color: '#3C4B6B' }}>{item.explanation}</div>}
+                  {item.explanation && <div className="text-[13px] leading-relaxed whitespace-pre-wrap" style={{ color: '#3C4B6B' }}><MathText text={item.explanation} /></div>}
                 </div>
               )}
             </>

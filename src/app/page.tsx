@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { User } from '@supabase/supabase-js';
+import MathText from '@/components/MathText';
+import InstallPrompt from '@/components/InstallPrompt';
 
 // ═══════════════════════════════════════════════
 // 타입
@@ -97,29 +99,6 @@ function isShortAnswerCorrect(student: string, correct: string): boolean {
 }
 
 // ─── 수학 텍스트 렌더링 ───
-function MathText({ text, className = '' }: { text: string; className?: string }) {
-  let processed = text
-    .replace(/>=|≥/g, '≥')
-    .replace(/<=|≤/g, '≤')
-    .replace(/(?<![<\w])<(?![<=\w])/g, '＜')
-    .replace(/(?<![<\w])>(?![>=\w])/g, '＞');
-
-  const parts = processed.split(/(?<![a-zA-Z가-힣0-9])([a-zA-Z])(?=[^a-zA-Z가-힣]|$)/g);
-  const elements: React.ReactNode[] = [];
-  parts.forEach((part, i) => {
-    if (part && /^[a-zA-Z]$/.test(part)) {
-      elements.push(
-        <span key={i} style={{ fontStyle: 'italic', fontFamily: 'Georgia, "Times New Roman", serif' }}>
-          {part}
-        </span>
-      );
-    } else if (part) {
-      elements.push(<span key={i}>{part}</span>);
-    }
-  });
-  return <span className={className}>{elements}</span>;
-}
-
 // ─── 이미지 압축 ───
 async function compressImage(file: File): Promise<File> {
   return new Promise((resolve) => {
@@ -896,6 +875,7 @@ export default function Home() {
   if (view === 'home') {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col max-w-lg mx-auto">
+        {!labMode && <InstallPrompt />}
         {/* 헤더 */}
         <div className="bg-white border-b border-slate-100 px-4 py-3 flex items-center justify-between sticky top-0 z-20">
           <div className="flex items-center gap-2">
@@ -1347,7 +1327,7 @@ export default function Home() {
   // ─── 스캔 ───
   if (view === 'scan') {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col max-w-lg mx-auto relative">
+      <div className="min-h-screen bg-[#F4F6FA] flex flex-col max-w-[430px] mx-auto relative">
         {/* 풀스크린 분석 중 오버레이 */}
         {parsing && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-6">
@@ -1359,14 +1339,14 @@ export default function Home() {
                 </svg>
               </div>
               <div>
-                <p className="text-base font-bold text-slate-800 mb-1">🤖 AI가 문제를 분석하고 있어요</p>
+                <p className="text-base font-bold text-slate-800 mb-1">AI가 문제를 분석하고 있어요</p>
                 <p className="text-xs text-slate-500">10~20초 정도 걸려요. 잠깐만 기다려주세요.</p>
               </div>
               <div className="text-xs text-slate-400 space-y-1.5 text-left bg-slate-50 rounded-lg px-4 py-3">
-                <p>📖 시험지 글자 인식</p>
-                <p>🎯 정답 추론</p>
-                <p>💡 해설 생성</p>
-                <p>🏷️ 과목·단원 분류</p>
+                <p>· 시험지 글자 인식</p>
+                <p>· 정답 추론</p>
+                <p>· 해설 생성</p>
+                <p>· 과목·단원 분류</p>
               </div>
             </div>
           </div>
@@ -1379,7 +1359,7 @@ export default function Home() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/>
             </svg>
           </button>
-          <h1 className="font-bold text-slate-800">시험지 스캔</h1>
+          <h1 className="font-bold text-slate-800">{labMode ? '틀린 문제 찍기' : '시험지 스캔'}</h1>
         </div>
 
         <div className="flex-1 p-4 space-y-4">
@@ -1392,7 +1372,7 @@ export default function Home() {
               <img src={imagePreview} alt="preview" className="w-full object-contain max-h-72" />
             ) : (
               <div className="text-center py-12 space-y-2">
-                <div className="text-5xl">📷</div>
+                <svg className="w-12 h-12 mx-auto text-[#1B3F8B]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 8a2 2 0 0 1 2-2h2l1.5-2h5L16 6h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.5"/></svg>
                 <p className="text-slate-500 text-sm font-medium">사진을 선택하세요</p>
                 <p className="text-slate-400 text-xs">시험지, 오답, 교재 등</p>
               </div>
@@ -1405,13 +1385,13 @@ export default function Home() {
               onClick={() => cameraRef.current?.click()}
               className="bg-white border border-slate-200 rounded-xl py-3 text-sm font-medium text-slate-600 hover:border-[#1B3F8B] hover:text-[#1B3F8B] transition flex items-center justify-center gap-2"
             >
-              <span>📸</span> 카메라 촬영
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 8a2 2 0 0 1 2-2h2l1.5-2h5L16 6h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.5"/></svg> 카메라 촬영
             </button>
             <button
               onClick={() => galleryRef.current?.click()}
               className="bg-white border border-slate-200 rounded-xl py-3 text-sm font-medium text-slate-600 hover:border-[#1B3F8B] hover:text-[#1B3F8B] transition flex items-center justify-center gap-2"
             >
-              <span>🖼️</span> 갤러리 선택
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 16l5-5 4 4 3-3 6 6"/><circle cx="9" cy="9" r="1.5"/></svg> 갤러리 선택
             </button>
           </div>
 
@@ -1434,7 +1414,7 @@ export default function Home() {
                   AI 분석 중...
                 </>
               ) : (
-                <>🔍 문제 분석하기</>
+                <>문제 분석하기</>
               )}
             </button>
           )}
@@ -1446,7 +1426,7 @@ export default function Home() {
   // ─── 카테고리 확인 ───
   if (view === 'confirm') {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col max-w-lg mx-auto">
+      <div className="min-h-screen bg-[#F4F6FA] flex flex-col max-w-[430px] mx-auto">
         <div className="bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
           <button onClick={() => setView('scan')} className="text-slate-400 hover:text-slate-600 transition">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1505,7 +1485,7 @@ export default function Home() {
           ))}
         </div>
 
-        <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white border-t border-slate-100 px-4 py-3 z-20">
+        <div className="fixed bottom-0 left-0 right-0 max-w-[430px] mx-auto bg-white border-t border-slate-100 px-4 py-3 z-20">
           <p className="text-xs text-slate-400 text-center mb-2">
             {confirmItems.filter(c => c.selected).length}개 선택됨 · 다음 단계에서 단원을 알려주세요
           </p>
@@ -1533,7 +1513,7 @@ export default function Home() {
     const selectedItems = confirmItems.filter(c => c.selected);
     const suggestedSubject = parseResult?.overall_subject || '';
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col max-w-lg mx-auto">
+      <div className="min-h-screen bg-[#F4F6FA] flex flex-col max-w-[430px] mx-auto">
         <div className="bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
           <button onClick={() => setView('confirm')} className="text-slate-400 hover:text-slate-600 transition">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1637,20 +1617,20 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white border-t border-slate-100 px-4 py-3 z-20 space-y-2">
+        <div className="fixed bottom-0 left-0 right-0 max-w-[430px] mx-auto bg-white border-t border-slate-100 px-4 py-3 z-20 space-y-2">
           <button
             onClick={() => handleSaveToWrongNote(true)}
             disabled={saving || generating}
             className="w-full bg-[#1B3F8B] text-white rounded-xl py-4 text-base font-bold hover:bg-[#163272] transition disabled:opacity-60"
           >
-            {(saving || generating) ? '처리 중...' : '🧠 저장하고 유사문제 만들기'}
+            {(saving || generating) ? '처리 중...' : '저장하고 비슷한 문제 만들기'}
           </button>
           <button
             onClick={() => handleSaveToWrongNote(false)}
             disabled={saving || generating}
             className="w-full bg-white border border-slate-200 text-slate-600 rounded-xl py-3 text-sm font-medium hover:bg-slate-50 transition disabled:opacity-60"
           >
-            💾 저장만 하고 홈으로
+            {labMode ? '저장만 하고 학습실로' : '저장만 하고 홈으로'}
           </button>
         </div>
       </div>
@@ -1660,7 +1640,7 @@ export default function Home() {
   // ─── 미리보기 (생성된 유사문제) ───
   if (view === 'preview') {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col max-w-lg mx-auto">
+      <div className="min-h-screen bg-[#F4F6FA] flex flex-col max-w-[430px] mx-auto">
         <div className="bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
           <button onClick={() => setView('home')} className="text-slate-400 hover:text-slate-600 transition">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1692,7 +1672,7 @@ export default function Home() {
           ))}
         </div>
 
-        <div className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white border-t border-slate-100 px-4 py-3 z-20 space-y-2">
+        <div className="fixed bottom-0 left-0 right-0 max-w-[430px] mx-auto bg-white border-t border-slate-100 px-4 py-3 z-20 space-y-2">
           {labMode ? (
             <button
               onClick={() => { window.location.href = '/lab'; }}
@@ -1706,7 +1686,7 @@ export default function Home() {
               onClick={() => startQuiz(previewItems, 'generated')}
               className="w-full bg-[#1B3F8B] text-white rounded-xl py-4 text-base font-bold hover:bg-[#163272] transition"
             >
-              ▶️ 풀어보기
+              풀어보기
             </button>
             <button
               onClick={() => { setSelectedIds(new Set()); setView('home'); }}
