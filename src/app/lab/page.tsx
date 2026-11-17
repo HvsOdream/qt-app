@@ -419,7 +419,9 @@ export default function LabPage() {
         </div>
 
         <div className="px-5 pt-4 pb-6 flex flex-col gap-3 flex-1">
-          <Link href="/?lab=1" onClick={() => log('capture_open')}
+          {/* 전체 새로 고침으로 넘어간다: 오답노트 화면이 주소의 lab=1 을 처음부터 읽어야 한다 */}
+          <button type="button" onClick={async () => { log('capture_open'); await flush(); window.location.href = '/?lab=1'; }}
+            className="rounded-[18px] p-[18px] flex items-center gap-3.5 text-white text-left" style={{ background: INK }}> log('capture_open')}
             className="rounded-[18px] p-[18px] flex items-center gap-3.5 text-white" style={{ background: INK }}>
             <div className="w-[52px] h-[52px] rounded-[14px] flex items-center justify-center shrink-0" style={{ background: 'rgba(255,255,255,0.12)' }}>
               <Icon d={I.camera} size={26} color="#fff" width={2} />
@@ -428,7 +430,7 @@ export default function LabPage() {
               <div className="text-base font-extrabold">틀린 문제 찍기</div>
               <div className="text-xs opacity-75">교재·기출 한 문제만 찍어도 돼요</div>
             </div>
-          </Link>
+          </button>
 
           <button type="button" onClick={startPractice} disabled={!hasPool}
             className="bg-white rounded-[18px] px-[18px] py-4 flex items-center gap-3.5 text-left shadow-sm disabled:opacity-60">
