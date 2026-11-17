@@ -215,7 +215,8 @@ export default function Home() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
-      setView(session?.user ? 'home' : 'home'); // home에서 비로그인 처리
+      // home에서 비로그인 처리. 이미 다른 화면으로 넘어갔으면 건드리지 않는다
+      setView((v) => (v === 'loading' ? 'home' : v));
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
